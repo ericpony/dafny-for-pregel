@@ -17,10 +17,8 @@ class PregelGraphColoring
 	 **************************************/
 
 	method SendMessage(src: VertexId, dst: VertexId, w: Weight)
-		requires msg != null && msg.Length0 > src && msg.Length1 > dst
-		requires sent != null && sent.Length0 > src && sent.Length1 > dst
-		requires vAttr != null && vAttr.Length > src && vAttr.Length > dst
-		requires src >= 0 && dst >= 0
+		requires valid1(vAttr) && valid2(sent) && valid2(msg)
+		requires valid0(src) && valid0(dst)
 		modifies msg, sent
 	{
 		if(vAttr[src] != vAttr[dst]) {
@@ -34,9 +32,9 @@ class PregelGraphColoring
 		a || b
 	}
 
-	method vprog(vid: VertexId, msg: Message)
-		requires vid >= 0
-		requires vAttr != null && vAttr.Length > 1 && vAttr.Length > vid
+	method VertexProgram(vid: VertexId, msg: Message)
+		requires valid0(vid) && valid1(vAttr)
+		requires vAttr.Length > 1 // so that we can use a different color
 		modifies vAttr
 	{
 		if(msg == true)
@@ -47,9 +45,10 @@ class PregelGraphColoring
 		}
 	}
 
-	function method vprog2(vid: VertexId, msg: Message, attr: Color): Color
-		requires vAttr != null && vAttr.Length > 1 && vAttr.Length > vid
-		reads this`vAttr
+	function method VertexProgram_v2(vid: VertexId, msg: Message, attr: Color): Color
+		requires valid0(vid) && valid1(vAttr)
+		requires vAttr.Length > 1 // so that we can use a different color
+		reads this`vAttr, this`numVertices
 	{
 		// function cannot return a nondeterministic value
 		// var a :| a != attr && a >= 0 && a < vAttr.Length; a
@@ -61,9 +60,8 @@ class PregelGraphColoring
 	 ***********************/
 
 	function method Invariant(): bool
-		requires graph != null && sent != null && vAttr != null
-		requires vAttr.Length == graph.Length0 == graph.Length1
-		reads this`graph, this`vAttr, this`sent, vAttr
+		requires valid1(vAttr) && valid2(graph) && valid2(sent)
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
 	{
 		// After the Pregel loop terminates, adjacent vertices will have different colors.
 		!active() ==>
@@ -76,33 +74,48 @@ class PregelGraphColoring
 	 ******************/
 
 	function method active(): bool
-		requires sent != null
-		reads this`sent
+		requires valid2(sent)
+		reads this`sent, this`numVertices
 	{
-		exists i, j :: 0 <= i < sent.Length0 && 0 <= j < sent.Length1 && sent[i,j]
+		exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 	}
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
-		requires graph != null && 0 <= src < graph.Length0 && 0 <= dst < graph.Length1
-		reads this`graph
+		requires valid2(graph) && valid0(src) && valid0(dst)
+		reads this`graph, this`numVertices
 	{
-		graph[src,dst] > 0.0
+		graph[src,dst] != 0.0
+	}
+
+	function valid0(vid: int): bool
+		reads this`numVertices
+	{
+		0 <= vid < numVertices
+	}
+
+	function valid1<T> (arr: array<T>): bool
+		reads this`numVertices
+	{
+		arr != null && arr.Length == numVertices
+	}
+
+	function valid2<T> (mat: array2<T>): bool
+		reads this`numVertices
+	{
+		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices
 	}
 
 	method Pregel()
 		requires numVertices > 1
-		requires vAttr != null && vAttr.Length == numVertices
-		requires graph != null && graph.Length0 == numVertices && graph.Length1 == numVertices
-		requires sent != null && sent.Length0 == numVertices && sent.Length1 == numVertices
-		requires msg != null && msg.Length0 == numVertices && msg.Length1 == numVertices
-		requires forall i,j :: (0 <= i < numVertices && 0 <= j < numVertices) ==> graph[i,j] >= 0.0
+		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
+		//requires forall i,j :: (0 <= i < numVertices && 0 <= j < numVertices) ==> graph[i,j] >= 0.0
 		modifies vAttr, msg, sent
 	{
-		//forall i: VertexId | (0 <= i < numVertices) { vAttr[i] := vprog2(i, false, vAttr[i]); }
+		//forall i: VertexId | (0 <= i < numVertices) { vAttr[i] := VertexProgram_v2(i, false, vAttr[i]); }
 		var vid := 0;
 		while vid < numVertices
 		{
-			vprog(vid, false);
+			VertexProgram(vid, false);
 			vid := vid + 1;
 		}
 		sent[0,0] := true;
@@ -159,14 +172,14 @@ class PregelGraphColoring
 							src := src + 1;
 						}
 						// update vertex state according to the result of merges
-						vprog(dst, message);
-						// vAttr[dst] := vprog2(dst, message, vAttr[dst]);
+						VertexProgram(dst, message);
+						// vAttr[dst] := VertexProgram_v2(dst, message, vAttr[dst]);
 					}
 					dst := dst + 1;
 				}
 			}
 		}
-		// A correct coloring is obtained after the loop exits
+		// A correct coloring is obtained after the loop exits.
 		assert(Invariant());
 	}
 }
