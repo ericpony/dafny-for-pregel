@@ -1,10 +1,8 @@
 ﻿/**
  * This example shows that Dafny may accept incorrect assertions.
- *
- * (Confirmed at http://rise4fun.com/Dafny, 2016-03-29,
- * and by the stable version 1.9.6 released on Oct 12, 2015.
- * Seems to be fixed in change sets after Jan 2016.)
+ * See https://dafny.codeplex.com/workitem/145 for discussions.
  */
+
 predicate existential(mat: array2<bool>)
 	requires mat != null
 {
@@ -35,6 +33,6 @@ method foo(n: nat)
 		}
 		i := i + 1;
 	}
-	//assert !existential(mat); // wrongly verified by Dafny 
+	//assert !existential(mat); // wrongly verified by Dafny
 	//assert universal(mat);    // wrongly verified by Dafny
 }
