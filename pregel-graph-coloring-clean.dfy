@@ -162,7 +162,7 @@ class PregelGraphColoring
 		while active() && numIterations <= maxNumIterations
 			invariant !active() ==> noCollisions()
 		{
-			forall i,j | (0 <= i < numVertices && 0 <= j < numVertices)
+			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
 			{
 				sent[i,j] := false;
 			}

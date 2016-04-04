@@ -1,31 +1,37 @@
 ﻿/**
- * Given N >= 0, generate a permuation of {0,...,N-1} nondeterministically.
+ * Given n >= 0, generate a permuation of {0,...,n-1} nondeterministically.
  */
-method Permutation(N: int) returns (perm: array<int>)
-	requires N >= 0
+method Permutation(n: int) returns (perm: array<int>)
+	requires n >= 0
 	ensures perm != null
-	ensures perm.Length == N
-	ensures distinct(perm)
-	ensures forall i :: 0 <= i < perm.Length ==> 0 <= perm[i] < N
+	ensures perm.Length == n
+	ensures isPermutationOf(perm, n)
 {
-	var all := set x | 0 <= x < N;
-	var record := {};
-	perm := new int[N];
-	CardinalityLemma(N, all);
-	while record < all
-		invariant record <= all
-		invariant |record| <= |all|
-		invariant forall i :: 0 <= i < |record| ==> perm[i] in record
-		invariant distinct'(perm, |record|)
-		decreases |all| - |record|
+	var all := set x | 0 <= x < n;
+	var used := {};
+	perm := new int[n];
+	CardinalityLemma(n, all);
+	while used < all
+		invariant used <= all
+		invariant |used| <= |all|
+		invariant forall i :: 0 <= i < |used| ==> perm[i] in used
+		invariant distinct'(perm, |used|)
+		decreases |all| - |used|
 	{
-		CardinalityOrderingLemma(record, all);
-		var dst :| dst in all && dst !in record;
-		perm[|record|] := dst;
-		record := record + {dst};
+		CardinalityOrderingLemma(used, all);
+		var dst :| dst in all && dst !in used;
+		perm[|used|] := dst;
+		used := used + {dst};
 	}
-	assert record == all;
+	assert used == all;
 	print perm;
+}
+
+predicate isPermutationOf(a: array<int>, n: int)
+	requires a != null
+	reads a
+{
+	distinct(a) && forall i :: 0 <= i < a.Length ==> 0 <= a[i] < n
 }
 
 predicate distinct(a: array<int>)

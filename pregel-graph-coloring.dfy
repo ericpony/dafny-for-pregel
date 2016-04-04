@@ -38,7 +38,6 @@ class PregelGraphColoring
 
 	method VertexProgram(vid: VertexId, msg: Message)
 		requires valid0(vid) && valid1(vAttr)
-		requires vAttr.Length > 1 // so that we can use a different color
 		modifies vAttr
 	{
 		if msg == true {
@@ -152,7 +151,8 @@ class PregelGraphColoring
 		sent[0,0] := true;
 		numIterations := 0;
 
-		witness_for_existence(); assert active();
+		witness_for_existence();
+		assert active();
 
 		while (exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && numIterations <= maxNumIterations
 		//while active() && numIterations <= maxNumIterations
@@ -160,7 +160,7 @@ class PregelGraphColoring
 			//invariant !active() ==> 1==0
 			invariant !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions()
 		{
-			forall i,j | (0 <= i < numVertices && 0 <= j < numVertices)
+			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
 			{
 				sent[i,j] := false;
 			}

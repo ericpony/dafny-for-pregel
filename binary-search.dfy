@@ -1,4 +1,9 @@
-﻿method BinarySearch(arr: array<int>, key: int) returns (r: int)
+﻿/**
+  * Source:
+  * http://rise4fun.com/Dafny/tutorialcontent/guide#h211
+  */
+
+method BinarySearch(arr: array<int>, key: int) returns (r: int)
   requires arr != null;
   requires forall i,j :: 0 <= i < j < arr.Length ==> arr[i] <= arr[j];
   ensures 0 <= r ==> r < arr.Length && arr[r] == key;
