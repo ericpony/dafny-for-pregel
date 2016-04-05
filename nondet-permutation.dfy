@@ -5,6 +5,7 @@ method Permutation(n: int) returns (perm: array<int>)
 	requires n >= 0
 	ensures perm != null
 	ensures perm.Length == n
+	ensures fresh(perm)
 	ensures isPermutationOf(perm, n)
 {
 	var all := set x | 0 <= x < n;
