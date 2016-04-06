@@ -47,25 +47,28 @@ class PregelGraphColoring
 		}
 	}
 
-	/***********************
-	 * Correctness assertion
-	 ***********************/
-
+	/************************
+	 * Correctness assertions
+	 ************************/
 
 	function method correctlyColored(): bool
 		requires valid1(vAttr) && valid2(graph) && valid2(sent)
 		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
 	{
 		// adjacent vertices have different colors
-		forall i,j :: 0 <= i < numVertices && 0 <= j < numVertices ==> 
+		forall i,j :: 0 <= i < numVertices && 0 <= j < numVertices ==>
 			adjacent(i, j) ==> vAttr[i] != vAttr[j]
 	}
-	
+
+	/*******************************
+	 * Correctness helper assertions
+	 *******************************/
+
 	method Validated(maxNumIterations: nat) returns (res: bool)
 		requires numVertices > 1 && maxNumIterations > 0
 		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
 		modifies this`numVertices, vAttr, msg, sent
-		ensures res
+		//ensures res
 	{
 		var numIterations := pregel(maxNumIterations);
 		res := numIterations <= maxNumIterations ==> correctlyColored();
@@ -90,6 +93,42 @@ class PregelGraphColoring
 		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
 	{
 		adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst]
+	}
+
+	function method noCollisions'(srcBound: VertexId, dstBound: VertexId): bool
+		requires srcBound <= numVertices && dstBound <= numVertices
+		requires valid1(vAttr) && valid2(graph) && valid2(sent)
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+	{
+		forall src,dst :: 0 <= src < srcBound && 0 <= dst < dstBound ==>
+			(adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst])
+	}
+
+	lemma noCollisionsLemma()
+		requires valid1(vAttr) && valid2(graph) && valid2(sent)
+		ensures noCollisions'(numVertices, numVertices)
+	{
+		assume noCollisions();
+
+		var src := 0;
+		while src < numVertices
+			invariant src <= numVertices
+			invariant noCollisions'(src, numVertices)
+		{
+			var dst := 0;
+			assert noCollisionAt(src);
+			while dst < numVertices
+				invariant dst <= numVertices
+				invariant noCollisions'(src, dst)
+				invariant forall vid :: 0 <= vid < dst ==>
+					(adjacent(src, vid) && !sent[src, vid] ==> vAttr[src] != vAttr[vid])
+			{
+				assert noCollisionBetween(src, dst);
+				assert adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst];
+				dst := dst + 1;
+			}
+			src := src + 1;
+		}
 	}
 
 	/******************
@@ -128,19 +167,11 @@ class PregelGraphColoring
 		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices
 	}
 
-	predicate inv()
-		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
-	{
-		!active() ==> correctlyColored()
-	}
-
 	method pregel(maxNumIterations: nat) returns (numIterations: nat)
 		requires numVertices > 1 && maxNumIterations > 0
 		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
 		modifies vAttr, msg, sent
 		ensures numIterations <= maxNumIterations ==> correctlyColored()
-		//ensures inv()
 	{
 		var vid := 0;
 		while vid < numVertices
@@ -155,9 +186,6 @@ class PregelGraphColoring
 		assert active();
 
 		while (exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && numIterations <= maxNumIterations
-		//while active() && numIterations <= maxNumIterations
-			//invariant inv()
-			//invariant !active() ==> 1==0
 			invariant !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions()
 		{
 			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
@@ -174,8 +202,8 @@ class PregelGraphColoring
 				var dst := 0;
 				while dst < numVertices
 					invariant dst <= numVertices
-					invariant forall vid :: 0 <= vid < dst ==> noCollisionBetween(src, vid);
 					invariant forall vid :: 0 <= vid < src ==> noCollisionAt(vid)
+					invariant forall vid :: 0 <= vid < dst ==> noCollisionBetween(src, vid);
 				{
 					if adjacent(src, dst)
 					{
@@ -188,8 +216,7 @@ class PregelGraphColoring
 				src := src + 1;
 			}
 			assert noCollisions();
-			//assert exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]; // WRONGLY VERIFIED
-			//assert inv();
+
 			if exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
 				var dst := 0;
@@ -229,13 +256,15 @@ class PregelGraphColoring
 			numIterations := numIterations + 1;
 		}
 
-		//assert numIterations <= maxNumIterations ==> forall i, j :: 0 <= i < numVertices && 0 <= j < numVertices ==> !sent[i,j];
-		assert numIterations <= maxNumIterations ==> !active();
-		
+		assert numIterations <= maxNumIterations ==> !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]);
+		//assert numIterations <= maxNumIterations ==> !active();
+
 		assert numIterations <= maxNumIterations ==> noCollisions();
 
-		//assert (forall i, j :: 0 <= i < numVertices && 0 <= j < numVertices ==> !sent[i,j]) && noCollisions() ==> correctlyColored();
-		assert !active() && noCollisions() ==> correctlyColored();
+		noCollisionsLemma();
+
+		assert !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && noCollisions() ==> correctlyColored();
+		//assert !active() && noCollisions() ==> correctlyColored();
 
 		assert numIterations <= maxNumIterations ==> correctlyColored();
 	}
