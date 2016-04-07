@@ -36,14 +36,15 @@ class PregelGraphColoring
 
 	function method MergeMessage(a: Message, b: Message): bool { a || b }
 
-	method VertexProgram(vid: VertexId, msg: Message)
+	method VertexProgram(vid: VertexId, state: Color, msg: Message) returns (state': Color)
 		requires valid0(vid) && valid1(vAttr)
-		modifies vAttr
 	{
 		if msg == true {
 			// choose a different color nondeterministically
-			var newColor :| newColor >= 0 && newColor < vAttr.Length;
-			vAttr[vid] := newColor;
+			var color :| color >= 0 && color < vAttr.Length;
+			state' := color;
+		} else {
+			state' := state;
 		}
 	}
 
@@ -64,14 +65,14 @@ class PregelGraphColoring
 	 * Correctness helper assertions
 	 *******************************/
 
-	method Validated(maxNumIterations: nat) returns (res: bool)
+	method Validated(maxNumIterations: nat) returns (goal: bool)
 		requires numVertices > 1 && maxNumIterations > 0
 		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
 		modifies this`numVertices, vAttr, msg, sent
-		//ensures res
+		ensures goal
 	{
 		var numIterations := pregel(maxNumIterations);
-		res := numIterations <= maxNumIterations ==> correctlyColored();
+		goal := numIterations <= maxNumIterations ==> correctlyColored();
 	}
 
 	function method noCollisions(): bool
@@ -139,7 +140,7 @@ class PregelGraphColoring
 		requires valid2(sent)
 		reads this`sent, this`numVertices
 	{
-		exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
+		exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 	}
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
@@ -176,24 +177,21 @@ class PregelGraphColoring
 		var vid := 0;
 		while vid < numVertices
 		{
-			VertexProgram(vid, false);
+			vAttr[vid] := VertexProgram(vid, vAttr[vid], false);
 			vid := vid + 1;
 		}
-		sent[0,0] := true;
+		//sent[0,0] := true; witness_for_existence(); assert active();
+
 		numIterations := 0;
 
-		witness_for_existence();
-		assert active();
-
-		while (exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && numIterations <= maxNumIterations
-			invariant !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions()
+		while (exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && numIterations <= maxNumIterations
 		{
 			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
 			{
 				sent[i,j] := false;
 			}
 			var src := 0;
-			// invoke SendMessage on each edage
+			/* invoke SendMessage on each edage */
 			while src < numVertices
 				invariant src <= numVertices
 				invariant forall vid :: 0 <= vid < src ==> noCollisionAt(vid)
@@ -209,64 +207,54 @@ class PregelGraphColoring
 					{
 						SendMessage(src, dst, graph[src,dst]);
 					}
-					assert noCollisionBetween(src, dst);
+					//assert noCollisionBetween(src, dst);
 					dst := dst + 1;
 				}
-				assert noCollisionAt(src);
+				//assert noCollisionAt(src);
 				src := src + 1;
 			}
-			assert noCollisions();
+			//assert noCollisions();
 
-			if exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
+			if exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
 				var dst := 0;
 				while dst < numVertices
 				{
-					// Did some vertex send a message to dst?
+					/* Did some vertex send a message to dst? */
 					if exists src :: 0 <= src < numVertices && sent[src,dst]
 					{
 						var activated := false;
 						var message: Message;
 						var src := 0;
-						// aggregate the messages sent to dst
+						/* aggregate the messages sent to dst */
 						while src < numVertices
 						{
 							if sent[src,dst]
 							{
 								if !activated
 								{
-									// keep the first message as is
+									/* keep the first message as is */
 									message := msg[src,dst];
 									activated := true;
 								} else {
-									// merge the new message with the old one
+									/* merge the new message with the old one */
 									message := MergeMessage(message, msg[src,dst]);
 								}
 							}
 							src := src + 1;
 						}
-						// update vertex state according to the result of merges
-						VertexProgram(dst, message);
+						/* update vertex state according to the result of merges */
+						vAttr[dst] := VertexProgram(dst, vAttr[dst], message);
 					}
 					dst := dst + 1;
 				}
-				assert active();
 			}
-			assert !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions();
 			numIterations := numIterations + 1;
 		}
-
-		assert numIterations <= maxNumIterations ==> !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]);
-		//assert numIterations <= maxNumIterations ==> !active();
-
-		assert numIterations <= maxNumIterations ==> noCollisions();
-
 		noCollisionsLemma();
-
-		assert !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && noCollisions() ==> correctlyColored();
+		//assert numIterations <= maxNumIterations ==> !active() && noCollisions();
 		//assert !active() && noCollisions() ==> correctlyColored();
-
-		assert numIterations <= maxNumIterations ==> correctlyColored();
+		//assert numIterations <= maxNumIterations ==> correctlyColored();
 	}
 
 	lemma witness_for_existence()
