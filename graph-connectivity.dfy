@@ -68,20 +68,27 @@ class GraphConnectivity
 		graph[src,dst] != 0.0
 	}
 
+	/* Check if dst is reachable from src. */
 	function method connected(src: VertexId, dst: VertexId): bool
 		requires valid2(graph) && valid0(src) && valid0(dst)
 		reads this`graph, this`numVertices
 	{
-		exists next :: 0 <= next < numVertices && adjacent(src, next) && connected'(next, dst, numVertices)
+		exists dist :: 1 <= dist <= numVertices && connected'(src, dst, dist)
 	}
 
+	/* Check if dst is reachable from src through a path of length dist. */
 	function method connected'(src: VertexId, dst: VertexId, dist: int): bool
 		requires valid2(graph) && valid0(src) && valid0(dst)
 		reads this`graph, this`numVertices
 		decreases dist
 	{
 		dist > 0 &&
-		exists next :: 0 <= next < numVertices && adjacent(src, next) && connected'(next, dst, dist - 1)
+		if dist == 1
+		then
+			adjacent(src, dst)
+		else
+			exists next | 0 <= next < numVertices ::
+				adjacent(src, next) && connected'(next, dst, dist - 1)
 	}
 
 	function valid0(vid: VertexId): bool
@@ -101,4 +108,18 @@ class GraphConnectivity
 	{
 		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices
 	}
+
+	lemma ConnectivityLemma2(v1: VertexId, v2: VertexId, v3: VertexId, dist: nat)
+		requires 1 <= dist < numVertices
+		requires valid2(graph) && valid0(v1) && valid0(v2) && valid0(v3)
+		ensures adjacent(v1, v2) && connected'(v2, v3, dist) ==> connected(v1, v3)
+	{
+		ConnectivityLemma2'(v1, v3, dist + 1);
+	}
+
+	lemma ConnectivityLemma2'(src: VertexId, dst: VertexId, dist: nat)
+		requires 1 <= dist <= numVertices
+		requires valid2(graph) && valid0(src) && valid0(dst)
+		ensures connected'(src, dst, dist) ==> connected(src, dst)
+	{}
 }
