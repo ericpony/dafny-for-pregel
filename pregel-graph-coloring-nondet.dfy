@@ -7,11 +7,11 @@ type Weight = real
 
 class PregelGraphColoring
 {
-	var numVertices: int;
-	var vAttr : array<VertexId>;
+	var numVertices: nat;
+	var graph: array2<Weight>;
+	var vAttr : array<Color>;
 	var vMsg : array<Message>;
 	var msg : array2<Message>;
-	var graph: array2<Weight>;
 	var sent : array2<bool>;
 
 	/**************************************
