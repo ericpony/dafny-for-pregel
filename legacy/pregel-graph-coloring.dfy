@@ -213,7 +213,7 @@ class PregelGraphColoring
 				//assert noCollisionAt(src);
 				src := src + 1;
 			}
-			//assert noCollisions();
+			assert noCollisions();
 
 			if exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
@@ -251,8 +251,9 @@ class PregelGraphColoring
 			}
 			numIterations := numIterations + 1;
 		}
+		//assert numIterations <= maxNumIterations ==> noCollisions();
 		noCollisionsLemma();
-		//assert numIterations <= maxNumIterations ==> !active() && noCollisions();
+		//assert numIterations <= maxNumIterations ==> !active();
 		//assert !active() && noCollisions() ==> correctlyColored();
 		//assert numIterations <= maxNumIterations ==> correctlyColored();
 	}

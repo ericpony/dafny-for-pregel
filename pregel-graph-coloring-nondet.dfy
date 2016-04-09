@@ -1,4 +1,6 @@
-﻿type VertexId = int
+﻿include "nondet-permutation.dfy"
+
+type VertexId = int
 type Message = bool
 type Color = int
 type Weight = real
@@ -66,14 +68,14 @@ class PregelGraphColoring
 	 * Correctness helper assertions
 	 *******************************/
 
-	method Validated(maxNumIterations: nat) returns (res: bool)
+	method Validated(maxNumIterations: nat) returns (goal: bool)
 		requires numVertices > 1 && maxNumIterations > 0
 		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
 		modifies this`numVertices, vAttr, msg, sent
-		//ensures res
+		ensures goal
 	{
 		var numIterations := pregel(maxNumIterations);
-		res := numIterations <= maxNumIterations ==> correctlyColored();
+		goal := numIterations <= maxNumIterations ==> correctlyColored();
 	}
 
 	function method noCollisions(): bool
@@ -106,30 +108,31 @@ class PregelGraphColoring
 			(adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst])
 	}
 
-	lemma noCollisionsLemma()
+	lemma CollisionLemma()
 		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		ensures noCollisions'(numVertices, numVertices)
+		ensures noCollisions() ==> noCollisions'(numVertices, numVertices)
 	{
-		assume noCollisions();
-
-		var src := 0;
-		while src < numVertices
-			invariant src <= numVertices
-			invariant noCollisions'(src, numVertices)
+		if noCollisions()
 		{
-			var dst := 0;
-			assert noCollisionAt(src);
-			while dst < numVertices
-				invariant dst <= numVertices
-				invariant noCollisions'(src, dst)
-				invariant forall vid :: 0 <= vid < dst ==>
-					(adjacent(src, vid) && !sent[src, vid] ==> vAttr[src] != vAttr[vid])
+			var src := 0;
+			while src < numVertices
+				invariant src <= numVertices
+				invariant noCollisions'(src, numVertices)
 			{
-				assert noCollisionBetween(src, dst);
-				assert adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst];
-				dst := dst + 1;
+				var dst := 0;
+				assert noCollisionAt(src);
+				while dst < numVertices
+					invariant dst <= numVertices
+					invariant noCollisions'(src, dst)
+					invariant forall vid :: 0 <= vid < dst ==>
+						(adjacent(src, vid) && !sent[src, vid] ==> vAttr[src] != vAttr[vid])
+				{
+					assert noCollisionBetween(src, dst);
+					assert adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst];
+					dst := dst + 1;
+				}
+				src := src + 1;
 			}
-			src := src + 1;
 		}
 	}
 
@@ -182,13 +185,13 @@ class PregelGraphColoring
 			vid := vid + 1;
 		}
 		sent[0,0] := true;
+		witness_for_existence();
+		assert exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j];
+
 		numIterations := 0;
 
-		witness_for_existence();
-		assert active();
-
 		while (exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && numIterations <= maxNumIterations
-			//invariant !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions()
+			invariant !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions()
 		{
 			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
 			{
@@ -218,14 +221,13 @@ class PregelGraphColoring
 				src := src + 1;
 			}
 			assert noCollisions();
-			//assert exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]; // WRONGLY VERIFIED
-			//assert inv();
+
 			if exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
 				var dstCounter := 0;
-				var dstIndices := Permutation(numVertices);
+				var dstIndices := Permutation.Generate(numVertices);
 				while dstCounter < numVertices
-					invariant isPermutationOf(dstIndices, numVertices)
+					invariant Permutation.IsValid(dstIndices, numVertices)
 					
 				{
 					var dst := dstIndices[dstCounter];
@@ -235,7 +237,7 @@ class PregelGraphColoring
 						var activated := false;
 						var message: Message;
 						var srcCounter := 0;
-						var srcIndices := Permutation(numVertices);
+						var srcIndices := Permutation.Generate(numVertices);
 						// aggregate the messages sent to dst
 						while srcCounter < numVertices
 						{
@@ -259,15 +261,13 @@ class PregelGraphColoring
 					}
 					dstCounter := dstCounter + 1;
 				}
+				/* This hack can be removed after bug https://dafny.codeplex.com/workitem/144 is fixed. */
+				assume exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j];
 			}
 			numIterations := numIterations + 1;
 		}
-		noCollisionsLemma();
-		//assert numIterations <= maxNumIterations ==> !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]);
-		//assert numIterations <= maxNumIterations ==> !active();
-		//assert numIterations <= maxNumIterations ==> noCollisions();
-		//assert !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && noCollisions() ==> correctlyColored();
-		//assert !active() && noCollisions() ==> correctlyColored();
+		assert !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions();
+		CollisionLemma();
 		assert numIterations <= maxNumIterations ==> correctlyColored();
 	}
 
@@ -275,80 +275,4 @@ class PregelGraphColoring
 		requires valid2(sent) && numVertices > 0 && sent[0,0]
 		ensures active()
 	{}
-
-	/**
-	 * Given n >= 0, generate a permuation of {0,...,n-1} nondeterministically.
-	 */
-	method Permutation(n: int) returns (perm: array<int>)
-		requires n >= 0
-		ensures perm != null
-		ensures perm.Length == n
-		ensures fresh(perm)
-		ensures isPermutationOf(perm, n)
-	{
-		var all := set x | 0 <= x < n;
-		var used := {};
-		perm := new int[n];
-		CardinalityLemma(n, all);
-		while used < all
-			invariant used <= all
-			invariant |used| <= |all|
-			invariant forall i :: 0 <= i < |used| ==> perm[i] in used
-			invariant distinct'(perm, |used|)
-			decreases |all| - |used|
-		{
-			CardinalityOrderingLemma(used, all);
-			var dst :| dst in all && dst !in used;
-			perm[|used|] := dst;
-			used := used + {dst};
-		}
-		assert used == all;
-		print perm;
-	}
-
-	predicate isPermutationOf(a: array<int>, n: int)
-		requires a != null
-		reads a
-	{
-		distinct(a) && forall i :: 0 <= i < a.Length ==> 0 <= a[i] < n
-	}
-
-	predicate distinct(a: array<int>)
-		requires a != null
-		reads a
-	{
-		distinct'(a, a.Length)
-	}
-
-	predicate distinct'(a: array<int>, n: int)
-		requires a != null
-		requires a.Length >= n 
-		reads a
-	{
-		forall i,j :: 0 <= i < n && 0 <= j < n && i != j ==> a[i] != a[j]
-	}
-
-	lemma CardinalityLemma (size: int, s: set<int>) 
-		requires size >= 0
-		requires s == set x | 0 <= x < size
-		ensures	size == |s|
-	{
-		if(size == 0) {
-			assert size == |(set x | 0 <= x < size)|;
-		} else {
-			CardinalityLemma(size - 1, s - {size - 1});
-		}
-	}
-
-	lemma CardinalityOrderingLemma<T> (s1: set<T>, s2: set<T>)
-		requires s1 < s2
-		ensures |s1| < |s2|
-	{
-		var e :| e in s2 - s1;
-		if (s1 == s2 - {e}) {
-			assert |s1| == |s2| - 1;
-		} else {
-			CardinalityOrderingLemma(s1, s2 - {e});
-		}
-	}
 }
