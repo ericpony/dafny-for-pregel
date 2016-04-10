@@ -71,10 +71,16 @@
 		ensures |s1| < |s2|
 	{
 		var e :| e in s2 - s1;
-		if (s1 == s2 - {e}) {
-			assert |s1| == |s2| - 1;
-		} else {
+		if s1 != s2 - {e} {
 			CardinalityOrderingLemma(s1, s2 - {e});
 		}
+	}
+
+	lemma SetDiffLemma<T> (s1: set<T>, s2: set<T>)
+		requires s1 < s2
+		ensures s2 - s1 != {}
+	{
+		var e :| e in s2 - s1;
+		if s2 - s1 != {e} {} // What does Dafny prove here???
 	}
 }
