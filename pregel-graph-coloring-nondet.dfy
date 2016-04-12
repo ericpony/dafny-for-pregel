@@ -9,10 +9,9 @@ class PregelGraphColoring
 {
 	var numVertices: nat;
 	var graph: array2<Weight>;
-	var vAttr : array<Color>;
-	var vMsg : array<Message>;
 	var msg : array2<Message>;
 	var sent : array2<bool>;
+	var vAttr : array<Color>;
 
 	/**************************************
 	 * Beginning of user-supplied functions
@@ -224,11 +223,13 @@ class PregelGraphColoring
 
 			if exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
+				ghost var src',dst' :| 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
+
 				var dstCounter := 0;
 				var dstIndices := Permutation.Generate(numVertices);
 				while dstCounter < numVertices
 					invariant Permutation.IsValid(dstIndices, numVertices)
-					
+					invariant 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst']
 				{
 					var dst := dstIndices[dstCounter];
 					// Did some vertex send a message to dst?
@@ -261,8 +262,8 @@ class PregelGraphColoring
 					}
 					dstCounter := dstCounter + 1;
 				}
-				/* This hack can be removed after bug https://dafny.codeplex.com/workitem/144 is fixed. */
-				assume exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j];
+				//assert 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
+				assert exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j];
 			}
 			numIterations := numIterations + 1;
 		}

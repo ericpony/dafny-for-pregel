@@ -14,10 +14,9 @@ class PregelGraphColoring
 {
 	var numVertices: nat;
 	var graph: array2<Weight>;
-	var vAttr : array<Color>;
-	var vMsg : array<Message>;
 	var msg : array2<Message>;
 	var sent : array2<bool>;
+	var vAttr : array<Color>;
 
 	/**************************************
 	 * Beginning of user-supplied functions
@@ -251,7 +250,6 @@ class PregelGraphColoring
 		while (exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) && numIterations <= maxNumIterations
 			invariant !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions()
 		{
-			var vAttr' := new Color[numVertices];
 			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
 			{
 				sent[i,j] := false;
