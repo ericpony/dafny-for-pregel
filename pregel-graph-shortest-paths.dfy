@@ -1,5 +1,5 @@
 ﻿/**
- * This script tries to model and prove correctness of
+ * This script tries to model and prove correctness of a fully-distributed Bellman-Ford algorithm:
  * https://github.com/apache/spark/blob/master/graphx/src/main/scala/org/apache/spark/graphx/lib/ShortestPaths.scala
  */
 
@@ -10,25 +10,43 @@ type Distance = int
 type Message = array<Distance>
 type Weight = real
 
-class PregeShortestPaths
+class PregelBellmanFordAlgorithm
 {
 	var numVertices: nat;
+	var Infinity : nat;
 	var graph: array2<Weight>;
 	var vAttr : array2<VertexId>;
-	var vMsg : array<Message>;
 	var msg : array3<Distance>;
 	var sent : array2<bool>;
+
+	constructor (matrix: array2<Weight>)
+		requires matrix != null && matrix.Length0 == matrix.Length1
+		modifies this
+		ensures GraphInvariant()
+	{
+		graph := matrix;
+		var n := matrix.Length0;
+		vAttr := new VertexId[n,n];
+		sent := new bool[n,n];
+		msg := new Distance[n,n,n];
+		numVertices := n;
+		Infinity := n + 1;
+	}
 
 	/**************************************
 	 * Beginning of user-supplied functions
 	 **************************************/
 
 	method SendMessage(src: VertexId, dst: VertexId, w: Weight)
-		requires valid2(graph) && valid2(vAttr) && valid2(sent) && valid3(msg) && valid0(src) && valid0(dst)
-		requires MsgMatrixInvariant() && vAttrInvariant()
+		requires isVertex(src) && isVertex(dst)
+		requires GraphInvariant()
+		requires MsgMatrixInvariant()
+		requires vAttrInvariant()
+		requires adjacent(src, dst)
 		modifies msg, sent
 		ensures noCollisionBetween(src, dst)
-		ensures MsgMatrixInvariant() && vAttrInvariant()
+		ensures MsgMatrixInvariant()
+		ensures vAttrInvariant()
 	{
 		sent[src,dst] := false;
 		sent[dst,src] := false;
@@ -40,11 +58,17 @@ class PregeShortestPaths
 		{
 			if vAttr[src,i] > vAttr[dst,i] + 1
 			{
-				forall k | 0 <= k < numVertices {
-					msg[dst,src,k] := vAttr[dst,k] + 1;
+				var j := 0;
+				while j < numVertices
+					invariant j <= numVertices
+					invariant forall k | 0 <= k < j :: msg[dst,src,k] == vAttr[dst,k] + 1;
+				{
+					msg[dst,src,j] := vAttr[dst,j] + 1;
+					j := j + 1;
 				}
 				sent[dst,src] := true;
 				assert vAttr[src,i] > vAttr[dst,i] + 1; // needed by invariant
+				assert forall k | 0 <= k < numVertices :: msg[dst,src,k] == vAttr[dst,k] + 1;
 				break;
 			}
 			i := i + 1;
@@ -53,8 +77,8 @@ class PregeShortestPaths
 	}
 
 	method MergeMessage(a: Message, b: Message) returns (c: Message)
-		requires valid1(a) && valid1(b)
-		ensures fresh(c) && valid1(c)
+		requires isMessage(a) && isMessage(b)
+		ensures fresh(c) && isMessage(c)
 		ensures forall i | 0 <= i < numVertices :: c[i] == min(a[i], b[i])
 	{
 		c := new Distance[numVertices];
@@ -64,46 +88,65 @@ class PregeShortestPaths
 	}
 
 	method VertexProgram(vid: VertexId, msg: Message)
-		requires valid0(vid) && valid2(vAttr) && valid1(msg)
+		requires isVertex(vid) && isMessage(msg)
+		requires GraphInvariant()
+		requires MsgInvariant(vid, msg)
+		requires vAttrInvariant()
+		requires noCollisions'()
 		modifies vAttr
+		ensures noCollisions'()
 	{
+		var vAttr' := new Distance[numVertices];
+		forall i | 0 <= i < numVertices {
+			vAttr'[i] := vAttr[vid,i];
+		}
+		assert forall i | 0 <= i < numVertices ::
+			vAttr'[i] <= numVertices ==> connected'(vid, i, vAttr'[i]);
+
 		var i := 0;
 		while i < numVertices
+			invariant i <= numVertices
+			invariant forall i | 0 <= i < numVertices ::
+				vAttr'[i] <= numVertices ==> connected'(vid, i, vAttr'[i])
+			invariant forall i | 0 <= i < numVertices ::
+				msg[i] <= numVertices ==> connected'(vid, i, msg[i])
+			invariant forall j | 0 <= j < i :: vAttr[vid,j] == min(vAttr'[j], msg[j])
 		{
-			if vid != i {
-				vAttr[vid,i] := min(vAttr[vid,i], msg[i]);
-			}
+			vAttr[vid,i] := min(vAttr'[i], msg[i]);
 			i := i + 1;
 		}
+		assert forall dst | 0 <= dst < numVertices ::
+			vAttr[vid,dst] <= numVertices ==> connected'(vid, dst, vAttr[vid,dst]);
 	}
 
 	/************************
 	 * Correctness assertions
 	 ************************/
 
-	function method distVectorConverged(): bool
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
-		requires vAttrInvariant()
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+	function method distancesComputed(): bool
+		requires GraphInvariant()
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
-		distVectorConverged'(numVertices)
+		distancesComputed'(numVertices)
 	}
 
-	function method distVectorConverged'(dist: nat): bool
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
-		requires vAttrInvariant()
-		requires 0 <= dist <= numVertices
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+	function method distancesComputed'(dist: nat): bool
+		requires GraphInvariant()
+		requires 0 <= dist < Infinity
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
 		forall i,j | 0 <= i < numVertices && 0 <= j < numVertices ::
-			(connected'(i, j, dist) ==> 0 <= vAttr[i,j] <= dist)
+			((connectedWithin(i, j, dist) ==> 0 <= vAttr[i,j] <= dist)
+			&&
+			(vAttr[i,j] < Infinity ==> connected'(i, j, vAttr[i,j])))
 	}
 
 	lemma DistanceLemma()
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
+		requires GraphInvariant()
 		requires vAttrInvariant()
+		requires noCollisions'()
 		ensures !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j])
-				&& noCollisionsInductive(numVertices, numVertices) ==> distVectorConverged()
+				&& noCollisionsInductive(numVertices, numVertices) ==> distancesComputed()
 	{
 		if !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j])
 				&& noCollisionsInductive(numVertices, numVertices)
@@ -113,107 +156,63 @@ class PregeShortestPaths
 	}
 
 	lemma DistanceLemma'(dist: nat)
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
-		requires 0 <= dist <= numVertices
+		requires GraphInvariant()
 		requires vAttrInvariant()
+		requires noCollisions'()
+		requires 0 <= dist < Infinity
 		requires !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j])
 		requires noCollisionsInductive(numVertices, numVertices)
-		//requires noCollisionsInductive'(numVertices, numVertices)
-		ensures distVectorConverged'(dist)
+		ensures distancesComputed'(dist)
 	{	
 		if dist > 0
 		{
 			DistanceLemma'(dist - 1);
-		}
-		/*
-		assert forall src,dst | 0 <= src < numVertices && 0 <= dst < numVertices ::
-			(adjacent(src, dst) && !sent[src,dst] && !sent[dst,src] ==>
-			forall i | 0 <= i < numVertices ::
-				(0 <= vAttr[dst,i] <= numVertices && connected'(dst, i, vAttr[dst,i]) ==>
-					connected'(src, i, vAttr[dst,i] + 1)));
-		assert distVectorConverged'(0);
-		
-		if dist > 0
-		{
-			DistanceLemma'(dist - 1);
-			
+
 			var src := 0;
 			while src < numVertices
 				invariant src <= numVertices
-				invariant forall i,j | 0 <= i < src && 0 <= j < numVertices :: connected'(i, j, dist) ==> vAttr[i,j] <= dist
-				invariant forall i,j | 0 <= i < src && 0 <= j < numVertices :: vAttr[i,j] == dist ==> connected'(i, j, dist)
+				invariant forall i,j | 0 <= i < src && 0 <= j < numVertices :: connectedWithin(i, j, dist) ==> vAttr[i,j] <= dist
 			{
 				var dst := 0;
 				while dst < numVertices
 					invariant dst <= numVertices
 					invariant forall j | 0 <= j < dst :: connected'(src, j, dist) ==> vAttr[src,j] <= dist
-					invariant forall j | 0 <= j < dst :: vAttr[src,j] == dist ==> connected'(src, j, dist)
 				{
-					//assert src == dst ==> vAttr[src,dst] == 0;
-					//if connected'(src, dst, dist)
-					{
-						//var v :| 0 <= v < numVertices && adjacent(src, v) && connected'(v, dst, dist - 1);						
-						//assert 0 <= vAttr[v,dst] <= dist - 1;
-						//assert 0 <= vAttr[src,dst] <= vAttr[v,dst] + 1;
-						//assert 0 <= vAttr[src,dst] <= dist;
-					}
-					//assert connected'(src, dst, dist) ==> vAttr[src,dst] <= dist;
 					dst := dst + 1;
 				}
 				src := src + 1;
 			}
 		}
-		*/
 	}
 
 	function method noCollisions'(): bool
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
+		requires GraphInvariant()
 		requires vAttrInvariant()
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
-		forall vid | 0 <= vid < numVertices :: noCollisionAt'(vid)
+		//forall vid | 0 <= vid < numVertices :: noCollisionAt'(vid)
+		forall src,dst | 0 <= src < numVertices && 0 <= dst < numVertices ::
+			(vAttr[src,dst] <= numVertices ==> connected'(src, dst, vAttr[src,dst]))
 	}
 
 	function method noCollisionAt'(src: VertexId): bool
-		requires valid0(src) && valid2(vAttr) && valid2(graph) && valid2(sent)
+		requires isVertex(src)
+		requires GraphInvariant()
 		requires vAttrInvariant()
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
-		forall dst | 0 <= dst < numVertices :: noCollisionBetween'(src, dst)
-	}
-
-	function method noCollisionBetween'(src: VertexId, dst: VertexId): bool
-		requires valid0(src) && valid0(dst) && valid2(vAttr) && valid2(graph) && valid2(sent)
-		requires vAttrInvariant()
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
-	{
-		(adjacent(src, dst) && !sent[src,dst] && !sent[dst,src] ==>
-			forall i | 0 <= i < numVertices ::
-				(vAttr[dst,i] < numVertices && vAttr[src,i] < numVertices ==> 
-					connected'(dst, i, vAttr[dst,i]) ==> connected'(src, i, vAttr[src,i])))
-	}
-
-	function method noCollisionsInductive'(srcBound: VertexId, dstBound: VertexId): bool
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
-		requires srcBound <= numVertices && dstBound <= numVertices
-		requires vAttrInvariant()
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
-	{
-		forall src,dst | 0 <= src < srcBound && 0 <= dst < dstBound ::
-			(adjacent(src, dst) && !sent[src,dst] && !sent[dst,src] ==>
-				forall i | 0 <= i < numVertices ::
-					(connected'(dst, i, vAttr[dst,i]) ==> connected'(src, i, vAttr[src,i])))
+		forall dst | 0 <= dst < numVertices ::
+			(vAttr[src,dst] <= numVertices ==> connected'(src, dst, vAttr[src,dst]))
 	}
 
 	method Validated(maxNumIterations: nat) returns (goal: bool)
 		requires numVertices > 0
-		requires valid2(vAttr) && valid2(graph) && valid2(sent) && valid3(msg)
-		requires vAttrInvariant() && MsgMatrixInvariant()
+		requires GraphInvariant()
 		modifies this`numVertices, vAttr, msg, sent
 		ensures goal
 	{
 		var numIterations := Pregel(maxNumIterations);
-		goal := numIterations <= maxNumIterations ==> distVectorConverged();
+		goal := numIterations <= maxNumIterations ==> distancesComputed();
 	}
 
 	/*******************************
@@ -221,22 +220,24 @@ class PregeShortestPaths
 	 *******************************/
 
 	function method noCollisions(): bool
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		requires GraphInvariant()
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
 		forall vid | 0 <= vid < numVertices :: noCollisionAt(vid)
 	}
 
 	function method noCollisionAt(src: VertexId): bool
-		requires valid0(src) && valid2(vAttr) && valid2(graph) && valid2(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		requires isVertex(src)
+		requires GraphInvariant()
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
 		forall dst | 0 <= dst < numVertices :: noCollisionBetween(src, dst)
 	}
 
 	function method noCollisionBetween(src: VertexId, dst: VertexId): bool
-		requires valid0(src) && valid0(dst) && valid2(vAttr) && valid2(graph) && valid2(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		requires isVertex(src) && isVertex(dst)
+		requires GraphInvariant()
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
 		(src == dst ==> vAttr[src,dst] == 0)
 		&&
@@ -246,8 +247,8 @@ class PregeShortestPaths
 
 	function method noCollisionsInductive(srcBound: VertexId, dstBound: VertexId): bool
 		requires srcBound <= numVertices && dstBound <= numVertices
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		requires GraphInvariant()
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
 		forall src,dst | 0 <= src < srcBound && 0 <= dst < dstBound ::
 			(src == dst ==> vAttr[src,dst] == 0)
@@ -257,7 +258,7 @@ class PregeShortestPaths
 	}
 
 	lemma CollisionLemma()
-		requires valid2(vAttr) && valid2(graph) && valid2(sent)
+		requires GraphInvariant()
 		ensures noCollisions() ==> noCollisionsInductive(numVertices, numVertices)
 	{
 		if noCollisions()
@@ -294,7 +295,7 @@ class PregeShortestPaths
 	 ******************/
 
 	function method active(): bool
-		requires valid2(sent)
+		requires isMatrix(sent)
 		reads this`sent, this`numVertices
 	{
 		exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]
@@ -306,16 +307,15 @@ class PregeShortestPaths
 	}
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
-		requires valid2(graph) && valid0(src) && valid0(dst)
+		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
 		reads this`graph, this`numVertices
 	{
 		graph[src,dst] != 0.0
 	}
 
 	/* Check if the distance between src and dst is dist. */
-	function method hasDistance(src: VertexId, dst: VertexId, dist: int): bool
-		requires dist >= 0
-		requires valid2(graph) && valid0(src) && valid0(dst)
+	function method hasDistance(src: VertexId, dst: VertexId, dist: nat): bool
+		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
 		reads this`graph, this`numVertices
 	{
 		if dist == 0 then
@@ -326,19 +326,30 @@ class PregeShortestPaths
 
 	/* Check if dst is reachable from src. */
 	function method connected(src: VertexId, dst: VertexId): bool
-		requires valid2(graph) && valid0(src) && valid0(dst)
+		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
 		reads this`graph, this`numVertices
 	{
-		exists dist :: 0 <= dist <= numVertices && connected'(src, dst, dist)
+		// exists dist :: 0 <= dist <= numVertices && connected'(src, dst, dist)
+		connectedWithin(src, dst, numVertices)
+	}
+
+	/* Check if dst is reachable from src via a path with length <= dist. */
+	function method connectedWithin(src: VertexId, dst: VertexId, dist: nat): bool
+		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
+		reads this`graph, this`numVertices
+	{
+		exists d :: 0 <= d <= dist && connected'(src, dst, d)
 	}
 
 	/* Check if dst is reachable from src through a path of length dist. */
 	function method connected'(src: VertexId, dst: VertexId, dist: int): bool
-		requires dist >= 0
-		requires valid2(graph) && valid0(src) && valid0(dst)
+		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
 		reads this`graph, this`numVertices
 		decreases dist
 	{
+		if dist < 0 then
+			false
+		else
 		if dist == 0 then
 			src == dst
 		else
@@ -349,25 +360,25 @@ class PregeShortestPaths
 				adjacent(src, next) && connected'(next, dst, dist - 1)
 	}
 
-	predicate valid0(vid: VertexId)
+	predicate isVertex(vid: VertexId)
 		reads this`numVertices
 	{
 		0 <= vid < numVertices
 	}
 
-	predicate valid1<T> (arr: array<T>)
+	predicate isMessage<T> (arr: array<T>)
 		reads this`numVertices
 	{
 		arr != null && arr.Length == numVertices
 	}
 
-	predicate valid2<T> (mat: array2<T>)
+	predicate isMatrix<T> (mat: array2<T>)
 		reads this`numVertices
 	{
 		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices
 	}
 
-	predicate valid3<T> (mat: array3<T>)
+	predicate isMatrix3D<T> (mat: array3<T>)
 		reads this`numVertices
 	{
 		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices && mat.Length2 == numVertices
@@ -380,51 +391,59 @@ class PregeShortestPaths
 		forall i | 0 <= i < numVertices :: arr[i] >= 0
 	}
 
-	predicate vAttrInvariant0()
-		requires valid2(vAttr)
-		reads this`numVertices, this`vAttr
+	predicate GraphInvariant()
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity, this`Infinity
 	{
-		forall i | 0 <= i < numVertices :: vAttr[i,i] == 0
+		isMatrix(graph) && isMatrix(vAttr) && isMatrix(sent) 
+		&& isMatrix3D(msg) && Infinity == numVertices + 1
 	}
 
 	predicate vAttrInvariant()
-		requires valid2(vAttr)
-		reads this`numVertices, this`vAttr
+		requires isMatrix(vAttr)
+		reads this`vAttr, this`numVertices, this`Infinity
 	{
 		(forall i | 0 <= i < numVertices :: vAttr[i,i] == 0)
 		&&
-		(forall i,j | 0 <= i < numVertices && 0 <= j < numVertices :: vAttr[i,j] >= 0)
+		(forall i,j | 0 <= i < numVertices && 0 <= j < numVertices :: 0 <= vAttr[i,j] <= Infinity)
 	}
 
 	predicate MsgMatrixInvariant()
-		requires valid3(msg)
-		reads this`numVertices, this`msg
+		requires GraphInvariant()
+		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity
 	{
-		true
-		//forall i,j | 0 <= i < numVertices && 0 <= j < numVertices ::
-		//	valid1(msg[i,j]) // && isNonnegative(msg[i,j])
+		forall src,dst | 0 <= src < numVertices && 0 <= dst < numVertices ::
+			(sent[dst,src] ==>
+				(adjacent(src, dst) &&
+				forall k | 0 <= k < numVertices :: msg[dst,src,k] == vAttr[dst,k] + 1))
+	}
+
+	predicate MsgInvariant(vid: VertexId, msg: array<Distance>)
+		requires isVertex(vid) && isMessage(msg)
+		requires isMatrix(vAttr) && isMatrix(graph)
+		reads this`graph, this`vAttr, this`numVertices, msg
+	{
+		forall i | 0 <= i < numVertices ::
+			exists v | 0 <= v < numVertices :: adjacent(vid, v) && msg[i] == vAttr[v,i] + 1
 	}
 
 	method Pregel(maxNumIterations: nat) returns (numIterations: nat)
 		requires numVertices > 0
-		requires valid2(vAttr) && valid2(graph) && valid2(sent) && valid3(msg)
-		requires vAttrInvariant() && MsgMatrixInvariant()
+		requires GraphInvariant()
 		modifies vAttr, msg, sent
-		ensures vAttrInvariant()
-		ensures numIterations <= maxNumIterations ==> distVectorConverged()
+		ensures numIterations <= maxNumIterations ==> distancesComputed()
 	{
 		var src := 0;
 		while src < numVertices
 			invariant src <= numVertices
-			invariant forall i,j | 0 <= i < src && 0 <= j < numVertices :: vAttr[i,j] == if i == j then 0 else numVertices + 1
+			invariant forall i,j | 0 <= i < src && 0 <= j < numVertices :: vAttr[i,j] == if i == j then 0 else Infinity
 		{
 			var dst := 0;
 			while dst < numVertices
 				invariant dst <= numVertices
-				invariant forall j | 0 <= j < dst :: vAttr[src,j] == if src == j then 0 else numVertices + 1
-				invariant forall i,j | 0 <= i < src && 0 <= j < numVertices :: vAttr[i,j] == if i == j then 0 else numVertices + 1
+				invariant forall j | 0 <= j < dst :: vAttr[src,j] == if src == j then 0 else Infinity
+				invariant forall i,j | 0 <= i < src && 0 <= j < numVertices :: vAttr[i,j] == if i == j then 0 else Infinity
 			{
-				vAttr[src,dst] := if src == dst then 0 else numVertices + 1;
+				vAttr[src,dst] := if src == dst then 0 else Infinity;
 				dst := dst + 1;
 			}
 			src := src + 1;
@@ -432,31 +451,29 @@ class PregeShortestPaths
 		sent[0,0] := true;
 		assert sent[0,0]; // needed by the following assertion
 		assert exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j];
-
+		assert vAttrInvariant();
 		assert noCollisions'();
 
 		numIterations := 0;
 
 		while (exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) && numIterations <= maxNumIterations
 			invariant !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions()
-			//invariant !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions'()
+			//invariant noCollisions'()
 		{
-			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
-			{
-				sent[i,j] := false;
-			}
-			var src := 0;
-			
+			InitializeMatrix(sent, numVertices);
+
+			src := 0;			
 			/* invoke SendMessage on each edage */
 			while src < numVertices
 				invariant src <= numVertices
 				invariant forall vid | 0 <= vid < src :: noCollisionAt(vid)
-				//invariant forall vid | 0 <= vid < src :: noCollisionAt'(vid)
+				//invariant noCollisions'()
 			{
 				var dst := 0;
 				while dst < numVertices
 					invariant dst <= numVertices
 					invariant vAttrInvariant()
+					//invariant noCollisions'()
 					invariant forall vid | 0 <= vid < src :: noCollisionAt(vid)
 					invariant forall vid | 0 <= vid < dst :: noCollisionBetween(src, vid)
 				{
@@ -471,67 +488,99 @@ class PregeShortestPaths
 				//assert noCollisionAt(src);
 				src := src + 1;
 			}
-			assert noCollisions();
+			assert noCollisions() && noCollisions'();
 
-			if exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]
+			var dst := 0;
+			while dst < numVertices
+				invariant dst <= numVertices
 			{
-				var dstCounter := 0;
-				var dstIndices := Permutation.Generate(numVertices);
-				while dstCounter < numVertices
-					//invariant noCollisions'()
-					invariant Permutation.IsValid(dstIndices, numVertices)
+				/* Did some vertex send a message to dst? */
+				if exists src | 0 <= src < numVertices :: sent[src,dst]
 				{
-					var dst := dstIndices[dstCounter];
-					/* Did some vertex send a message to dst? */
-					if exists src | 0 <= src < numVertices :: sent[src,dst]
+					var src := 0;
+					var activated := false;
+					var message: Message := new Distance[numVertices];
+					ghost var src' :| 0 <= src' < numVertices && sent[src',dst];
+
+					/* aggregate the messages sent to dst */
+					while src < numVertices
+						invariant isMessage(message)
+						invariant src <= numVertices
+						invariant (exists i | 0 <= i < src :: sent[i,dst]) ==> activated
+						invariant 0 <= src' < numVertices && sent[src',dst]
+						invariant activated ==> MsgInvariant(dst, message)
 					{
-						var activated := false;
-						var message: Message := new Distance[numVertices];
-						var srcCounter := 0;
-						var srcIndices := Permutation.Generate(numVertices);
-						/* aggregate the messages sent to dst */
-						while srcCounter < numVertices
-							invariant valid1(message)
-							invariant MsgMatrixInvariant()
-							//invariant noCollisions'()
-							invariant Permutation.IsValid(srcIndices, numVertices)
-							invariant Permutation.IsValid(dstIndices, numVertices)
+						if sent[src,dst]
 						{
-							var src := srcIndices[srcCounter];
-							if sent[src,dst]
-							{
-								var message' := new Distance[numVertices];
-								forall i | 0 <= i < numVertices {
-									message'[i] := msg[src,dst,i];
-								}
-								if !activated
-								{
-									/* keep the first message as is */
-									message := message';
-									activated := true;
-								} else {
-									/* merge the new message with the old one */
-									message := MergeMessage(message, message');
-								}
+							assert MsgMatrixInvariant();
+							assert adjacent(dst, src);
+
+							var message' := new Distance[numVertices];
+							forall i | 0 <= i < numVertices {
+								message'[i] := msg[src,dst,i];
 							}
-							srcCounter := srcCounter + 1;
+
+							assert MsgMatrixInvariant();
+							assert forall i | 0 <= i < numVertices :: message'[i] == vAttr[src,i] + 1;
+							assert forall i | 0 <= i < numVertices ::
+								(exists vid | 0 <= vid < numVertices :: adjacent(dst, vid) && message'[i] == vAttr[vid,i] + 1);
+							assert MsgInvariant(dst, message');
+
+							if !activated
+							{
+								/* keep the first message as is */
+								message := message';
+								activated := true;
+							} else {
+								/* merge the new message with the old one */
+								var m := new Distance[numVertices];
+								var i := 0;
+								while i < numVertices
+									invariant 0 <= src' < numVertices && sent[src',dst]
+								{
+									m[i] := min(message[i], message'[i]);
+									i := i + 1;
+								}
+								message := m;
+								assume MsgInvariant(dst, message); // TODO: remove this assumption
+							}
 						}
-						/* update vertex state according to the result of merges */
-						VertexProgram(dst, message);
+						src := src + 1;
 					}
-					dstCounter := dstCounter + 1;
+					assert MsgInvariant(dst, message);
+
+					/* update vertex state according to the result of merges */
+					VertexProgram(dst, message);
 				}
-				/* This hack can be removed after bug https://dafny.codeplex.com/workitem/144 is fixed. */
-				assume exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j];
+				dst := dst + 1;
 			}
 			numIterations := numIterations + 1;
 		}
-		//assert numIterations <= maxNumIterations ==> !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]);
-		//assert !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions();
-		//assert numIterations <= maxNumIterations ==> noCollisions'();
-
-		/* noCollisions() and !active() imply distVectorConverged() */
+		/* noCollisions() and !active() imply distancesComputed() */
 		CollisionLemma();
 		DistanceLemma();
+	}
+
+	method InitializeMatrix(mat: array2<bool>, n: nat)
+		requires mat != null && mat.Length0 == n && mat.Length1 == n
+		modifies mat
+		ensures forall i,j | 0 <= i < n && 0 <= j < n :: !mat[i,j]
+	{
+		var src := 0;
+		while src < n
+			invariant src <= n
+			invariant forall i,j | 0 <= i < src && 0 <= j < n :: !mat[i,j]
+		{
+			var dst := 0;
+			while dst < n
+				invariant dst <= n
+				invariant forall j | 0 <= j < dst :: !mat[src,j]
+				invariant forall i,j | 0 <= i < src && 0 <= j < n :: !mat[i,j]
+			{
+				mat[src,dst] := false;
+				dst := dst + 1;
+			}
+			src := src + 1;
+		}
 	}
 }
