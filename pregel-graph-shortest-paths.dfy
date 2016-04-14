@@ -1,4 +1,6 @@
-﻿/**
+﻿// RUN: %dafny /compile:0 /timeLimit:30 "%s" > "%t"
+
+/**
  * This script tries to model and prove correctness of a fully-distributed Bellman-Ford algorithm:
  * https://github.com/apache/spark/blob/master/graphx/src/main/scala/org/apache/spark/graphx/lib/ShortestPaths.scala
  */
@@ -76,14 +78,14 @@ class PregelBellmanFordAlgorithm
 		assert sent[dst,src] <==> exists j | 0 <= j < numVertices :: vAttr[src,j] > vAttr[dst,j] + 1;
 	}
 
-	method MergeMessage(a: Message, b: Message) returns (c: Message)
-		requires isMessage(a) && isMessage(b)
-		ensures fresh(c) && isMessage(c)
-		ensures forall i | 0 <= i < numVertices :: c[i] == min(a[i], b[i])
+	method MergeMessage(msg: Message, msg': Message) returns (res: Message)
+		requires isMessage(msg) && isMessage(msg')
+		ensures fresh(res) && isMessage(res)
+		ensures forall i | 0 <= i < numVertices :: res[i] == min(msg[i], msg'[i])
 	{
-		c := new Distance[numVertices];
+		res := new Distance[numVertices];
 		forall i | 0 <= i < numVertices {
-			c[i] := min(a[i], b[i]);
+			res[i] := min(msg[i], msg'[i]);
 		}
 	}
 
@@ -163,7 +165,7 @@ class PregelBellmanFordAlgorithm
 		requires !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j])
 		requires noCollisionsInductive(numVertices, numVertices)
 		ensures distancesComputed'(dist)
-	{	
+	{
 		if dist > 0
 		{
 			DistanceLemma'(dist - 1);
@@ -289,7 +291,6 @@ class PregelBellmanFordAlgorithm
 		}
 	}
 
-
 	/******************
 	 * Helper functions
 	 ******************/
@@ -394,7 +395,7 @@ class PregelBellmanFordAlgorithm
 	predicate GraphInvariant()
 		reads this`graph, this`msg, this`vAttr, this`sent, this`numVertices, this`Infinity, this`Infinity
 	{
-		isMatrix(graph) && isMatrix(vAttr) && isMatrix(sent) 
+		isMatrix(graph) && isMatrix(vAttr) && isMatrix(sent)
 		&& isMatrix3D(msg) && Infinity == numVertices + 1
 	}
 
@@ -424,6 +425,60 @@ class PregelBellmanFordAlgorithm
 	{
 		forall i | 0 <= i < numVertices ::
 			exists v | 0 <= v < numVertices :: adjacent(vid, v) && msg[i] == vAttr[v,i] + 1
+	}
+
+	lemma MsgInvariantLemma(vid: VertexId, msg: array<Distance>, msg': array<Distance>)
+		requires numVertices > 0
+		requires isVertex(vid) && isMessage(msg) && isMessage(msg')
+		requires isMatrix(vAttr) && isMatrix(graph)
+		requires msg[..] == msg'[..]
+		requires MsgInvariant(vid, msg)
+		ensures MsgInvariant(vid, msg')
+	{
+		var i := 0;
+		while i < numVertices
+			invariant i <= numVertices
+			invariant forall ii | 0 <= ii < i ::
+				exists v | 0 <= v < numVertices :: adjacent(vid, v) && msg'[ii] == vAttr[v,ii] + 1
+		{
+			assert exists v | 0 <= v < numVertices :: adjacent(vid, v) && msg[i] == vAttr[v,i] + 1;
+			var v :| 0 <= v < numVertices && adjacent(vid, v) && msg[i] == vAttr[v,i] + 1;
+			assert 0 <= v < numVertices && adjacent(vid, v) && msg'[i] == vAttr[v,i] + 1;
+			i := i + 1;
+		}
+		assert forall i | 0 <= i < numVertices ::
+			exists v | 0 <= v < numVertices :: adjacent(vid, v) && msg'[i] == vAttr[v,i] + 1;
+		assert MsgInvariant(vid, msg');
+	}
+
+	method MergeMessageInv(vid: VertexId, msg: Message, msg': Message) returns (res: Message)
+		requires numVertices > 0
+		requires isVertex(vid) && isMessage(msg) && isMessage(msg')
+		requires isMatrix(vAttr) && isMatrix(graph)
+		requires MsgInvariant(vid, msg) && MsgInvariant(vid, msg')
+		ensures isMessage(res) && MsgInvariant(vid, res)
+	{
+		res := new Distance[numVertices];
+		var i := 0;
+		while i < numVertices
+			invariant i <= numVertices
+			invariant forall j | 0 <= j < i :: res[j] == min(msg[j], msg'[j])
+			invariant MsgInvariant(vid, msg) && MsgInvariant(vid, msg')
+			invariant forall j | 0 <= j < i ::
+				exists v | 0 <= v < numVertices :: adjacent(vid, v) && res[j] == vAttr[v,j] + 1
+		{
+			var v  :| 0 <= v < numVertices && adjacent(vid, v) && msg[i] == vAttr[v,i] + 1;
+			var v' :| 0 <= v' < numVertices && adjacent(vid, v') && msg'[i] == vAttr[v',i] + 1;
+			res[i] := min(msg[i], msg'[i]);
+			assert res[i] == msg[i] || res[i] == msg'[i];
+			assert (0 <= v < numVertices && adjacent(vid, v) && res[i] == vAttr[v,i] + 1)
+				|| (0 <= v' < numVertices && adjacent(vid, v') && res[i] == vAttr[v',i] + 1);
+			assert exists v | 0 <= v < numVertices :: adjacent(vid, v) && res[i] == vAttr[v,i] + 1;
+			i := i + 1;
+		}
+		assert forall i | 0 <= i < numVertices ::
+				exists v | 0 <= v < numVertices :: adjacent(vid, v) && res[i] == vAttr[v,i] + 1;
+		assert MsgInvariant(vid, res);
 	}
 
 	method Pregel(maxNumIterations: nat) returns (numIterations: nat)
@@ -462,7 +517,7 @@ class PregelBellmanFordAlgorithm
 		{
 			InitializeMatrix(sent, numVertices);
 
-			src := 0;			
+			src := 0;
 			/* invoke SendMessage on each edage */
 			while src < numVertices
 				invariant src <= numVertices
@@ -533,17 +588,9 @@ class PregelBellmanFordAlgorithm
 								activated := true;
 							} else {
 								/* merge the new message with the old one */
-								var m := new Distance[numVertices];
-								var i := 0;
-								while i < numVertices
-									invariant 0 <= src' < numVertices && sent[src',dst]
-								{
-									m[i] := min(message[i], message'[i]);
-									i := i + 1;
-								}
-								message := m;
-								assume MsgInvariant(dst, message); // TODO: remove this assumption
+								message := MergeMessageInv(dst, message, message');
 							}
+							assert MsgInvariant(dst, message);
 						}
 						src := src + 1;
 					}
