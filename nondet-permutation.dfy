@@ -8,7 +8,7 @@
 		ensures perm != null
 		ensures perm.Length == n
 		ensures fresh(perm)
-		ensures IsValid(perm, n)
+		ensures isValid(perm, n)
 	{
 		var all := set x | 0 <= x < n;
 		var used := {};
@@ -32,7 +32,7 @@
 		print perm;
 	}
 
-	predicate IsValid(a: array<int>, n: int)
+	predicate isValid(a: array<int>, n: int)
 		requires a != null
 		reads a
 	{

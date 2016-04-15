@@ -228,7 +228,7 @@ class PregelGraphColoring
 				var dstCounter := 0;
 				var dstIndices := Permutation.Generate(numVertices);
 				while dstCounter < numVertices
-					invariant Permutation.IsValid(dstIndices, numVertices)
+					invariant Permutation.isValid(dstIndices, numVertices)
 					invariant 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst']
 				{
 					var dst := dstIndices[dstCounter];
