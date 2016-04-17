@@ -24,6 +24,7 @@
 			decreases |all| - |used|
 		{
 			CardinalityOrderingLemma(used, all);
+
 			var dst :| dst in all && dst !in used;
 			perm[|used|] := dst;
 			used := used + {dst};
@@ -32,11 +33,14 @@
 		print perm;
 	}
 
-	predicate isValid(a: array<int>, n: int)
-		requires a != null
+	predicate isValid(a: array<int>, n: nat)
+		requires a != null && a.Length == n
 		reads a
 	{
-		distinct(a) && forall i | 0 <= i < a.Length :: 0 <= a[i] < n
+		assume forall i | 0 <= i < n :: i in a[..];
+		distinct(a)
+		&& (forall i | 0 <= i < a.Length :: 0 <= a[i] < n)
+		&& (forall i | 0 <= i < n :: i in a[..])
 	}
 
 	predicate distinct(a: array<int>)
