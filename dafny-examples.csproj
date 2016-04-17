@@ -31,29 +31,40 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="matrix-initialization.dfy" />
+    <None Include="dafny-bug\dafny-bug-existential-assertion.dfy" />
+    <None Include="dafny-bug\dafny-bug-existential-loop-condition.dfy" />
+    <None Include="dafny-bug\dafny-bug-existential-predicate.dfy" />
+    <None Include="dafny-bug\dafny-bug-forall-inside-loop.dfy" />
+    <None Include="dafny-bug\dafny-bug-loop-condition-v2.dfy" />
+    <None Include="dafny-bug\dafny-bug-loop-condition.dfy" />
+    <None Include="examples\binary-search.dfy" />
+    <None Include="examples\graph-connectivity.dfy" />
+    <None Include="examples\insertion-sort.dfy" />
+    <None Include="examples\matrix-initialization.dfy" />
+    <None Include="examples\max-n-sum.dfy" />
+    <None Include="examples\merge-disjoint-maps.dfy" />
+    <None Include="examples\nested-loop.dfy" />
+    <None Include="examples\permutation.dfy" />
+    <None Include="legacy\pregel-graph-coloring-clean.dfy" />
+    <None Include="legacy\pregel-graph-coloring.dfy" />
+    <None Include="legacy\pregel-graph-connected-components.dfy" />
     <None Include="dafny-trigger-example.dfy" />
-    <None Include="pregel-graph-shortest-paths-nondet.dfy" />
+    <None Include="legacy\pregel-graph-coloring-nondet-v3.dfy" />
+    <None Include="legacy\pregel-graph-connected-components-v3 %28bad design%29.dfy" />
+    <None Include="legacy\pregel-graph-connected-components-v2 %28bad design%29.dfy" />
+    <None Include="legacy\pregel-graph-coloring-nondet-v2.dfy" />
+    <None Include="legacy\pregel-graph-shortest-paths.2016-04-11.dfy" />
+    <None Include="legacy\pregel-graph-shortest-paths.2016-04-12.dfy" />
+    <None Include="legacy\pregel-graph-shortest-paths.2016-04-13.dfy" />
+    <None Include="legacy\pregel-graph-shortest-paths.2016-04-14.dfy" />
+    <None Include="pregel\nondet-permutation.dfy" />
+    <None Include="pregel\pregel-graph-coloring-nondet.dfy" />
+    <None Include="pregel\pregel-graph-coloring.dfy" />
+    <None Include="pregel\pregel-graph-connected-components.dfy" />
+    <None Include="pregel\pregel-graph-shortest-paths-nondet.dfy" />
+    <None Include="pregel\pregel-graph-shortest-paths.dfy" />
     <None Include="test.dfy" />
-    <None Include="dafny-bug-existential-loop-condition-v2.dfy" />
-    <None Include="dafny-bug-existential-loop-condition.dfy" />
-    <None Include="dafny-bug-forall-inside-loop.dfy" />
-    <None Include="dafny-bug-loop-condition-v2.dfy" />
-    <None Include="dafny-bug-loop-condition.dfy" />
-    <None Include="dafny-bug-existential-assertion.dfy" />
-    <None Include="merge-disjoint-maps.dfy" />
-    <None Include="nondet-permutation.dfy" />
-    <None Include="dafny-bug-existential-predicate.dfy" />
-    <None Include="pregel-graph-coloring-bug.dfy" />
-    <None Include="nested-loop.dfy" />
-    <None Include="max-n-sum.dfy" />
-    <None Include="graph-connectivity.dfy" />
-    <None Include="pregel-graph-coloring-clean.dfy" />
-    <None Include="pregel-graph-coloring-nondet.dfy" />
-    <None Include="insertion-sort.dfy" />
-    <None Include="binary-search.dfy" />
-    <None Include="permutation.dfy" />
-    <None Include="pregel-graph-connected-components.dfy" />
+    <None Include="legacy\pregel-graph-coloring-bug.dfy" />
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
