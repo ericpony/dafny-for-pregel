@@ -10,7 +10,7 @@ type VertexAttr = int
 type EdgeAttr = real
 type Message = int
 
-class PregelGraphColoring
+class PregelConnectedComponentMarkingAlgorithm
 {
 	var numVertices: nat;
 	var initMsg: Message;
@@ -22,7 +22,7 @@ class PregelGraphColoring
 	 * Beginning of user-supplied functions
 	 **************************************/
 
-	method SendMessage(src: VertexId, dst: VertexId, w: EdgeAttr) returns (msg: map<VertexId, Message>)
+	method SendMessage(src: VertexId, dst: VertexId, w: EdgeAttr) returns (msg: seq<(VertexId, Message)>)
 		requires isArray(vAttr) && isMatrix(sent) && isMatrix(graph)
 		requires isVertex(src) && isVertex(dst)
 		requires vAttrInvariant()
@@ -30,21 +30,21 @@ class PregelGraphColoring
 		modifies sent
 		ensures noCollisionBetween(src, dst)
 		ensures sent[src,dst] || sent[dst,src] <==> vAttr[src] != vAttr[dst];
-		ensures forall vid | vid in msg :: isMessage(msg[vid])
+		ensures forall m | m in msg :: isVertex(m.0) && isMessage(m.1)
 	{
 		if(vAttr[src] < vAttr[dst]) {
 			sent[src,dst] := true;
 			sent[dst,src] := false;
-			msg := map[dst := vAttr[src]];
+			msg := [(dst, vAttr[src])];
 		} else
 		if(vAttr[src] > vAttr[dst]) {
 			sent[dst,src] := true;
 			sent[src,dst] := false;
-			msg := map[src := vAttr[dst]];
+			msg := [(src, vAttr[dst])];
 		} else {
 			sent[src,dst] := false;
 			sent[dst,src] := false;
-			msg := map[];
+			msg := [];
 		}
 	}
 
@@ -185,13 +185,13 @@ class PregelGraphColoring
 	 * Helper functions
 	 ******************/
 
-	/*
+	/* Cannot use this predicate due to Dafny's bug (https://dafny.codeplex.com/workitem/146). */
 	function method active(): bool
 		requires isMatrix(sent)
 		reads this`sent, this`numVertices
 	{
 		exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]
-	}*/
+	}
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
 		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
@@ -304,20 +304,7 @@ class PregelGraphColoring
 		modifies vAttr, sent
 		ensures numIterations <= maxNumIterations ==> correctlyColored()
 	{
-		var active := new bool[numVertices];
-		var vid := 0;
-		while vid < numVertices
-			invariant vid <= numVertices
-			invariant vid > 0 ==> sent[0,0]
-			invariant forall i | 0 <= i < vid :: isVertexAttr(vAttr[i])
-		{
-			vAttr[vid] := VertexProgram(vid, vAttr[vid], initMsg);
-			active[vid] := true;
-			sent[vid, vid] := true;
-			vid := vid + 1;
-		}
-		assert vAttrInvariant();
-		assert exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j];
+		InitializeVertices();
 
 		numIterations := 0;
 
@@ -325,96 +312,136 @@ class PregelGraphColoring
 			invariant !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions()
 			invariant vAttrInvariant()
 		{
-			//ResetSentMatrix();
-
-			forall i | 0 <= i < numVertices { active[i] := false; }
-			assert forall i | 0 <= i < numVertices :: !active[i];
-
-			var src' := 0;
-			var srcIndices := Permutation.Generate(numVertices);
-			var msg := new Message[numVertices];
-
-			// invoke SendMessage on each edage
-			while src' < numVertices
-				invariant src' <= numVertices
-				invariant vAttrInvariant()
-				invariant Permutation.isValid(srcIndices, numVertices)
-				invariant forall i | 0 <= i < src' :: noCollisionAt(srcIndices[i])
-				invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
-			{
-				var src := srcIndices[src'];
-				var dst' := 0;
-				var dstIndices := Permutation.Generate(numVertices);
-				while dst' < numVertices
-					invariant dst' <= numVertices
-					invariant src == srcIndices[src']
-					invariant vAttrInvariant()
-					invariant Permutation.isValid(srcIndices, numVertices)
-					invariant Permutation.isValid(dstIndices, numVertices)
-					invariant forall i | 0 <= i < dst' :: noCollisionBetween(src, dstIndices[i]);
-					invariant forall i | 0 <= i < src' :: noCollisionAt(srcIndices[i])
-					invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
-				{
-					var dst := dstIndices[dst'];
-					if adjacent(src, dst)
-					{
-						var msg' := SendMessage(src, dst, graph[src,dst]);
-						AccumulateMessage(msg, msg', active);
-						//assert noCollisionBetween(src, dst);
-					}
-					//assert noCollisionBetween(src, dst);
-					dst' := dst' + 1;
-				}
-				NoCollisionPermutationLemma1(src, dstIndices);
-				//assert noCollisionAt(src);
-				src' := src' + 1;
-			}
-			NoCollisionPermutationLemma2(srcIndices);
+			var msg,active := AggregateMessages();
 			//assert noCollisions();
 
 			if exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
 				ghost var src',dst' :| 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
-				var vid := 0;
-				while vid < numVertices
-					invariant vAttrInvariant()
-					invariant 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst']
-					invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
-				{
-					if active[vid] {
-						vAttr[vid] := VertexProgram(vid, vAttr[vid], msg[vid]);
-					}
-					vid := vid + 1;
-				}
+
+				UpdateVertices(msg, active);
+
+				assert vAttrInvariant();
+				assert 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
 			}
+
 			numIterations := numIterations + 1;
 		}
-		assert !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions();
-		
+		//assert !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions();
+
 		CollisionLemma(); ColoringLemma();
 
 		assert !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> correctlyColored();
 	}
 
-	method AccumulateMessage(msg: array<Message>, msg': map<VertexId, Message>, active: array<bool>)
-		requires isArray(msg) && isArray(active)
-		requires forall vid | vid in msg' :: isMessage(msg'[vid])
+	method AggregateMessages() returns (msg: array<Message>, active: array<bool>)
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		requires vAttrInvariant()
+		modifies sent
+		//ensures vAttrInvariant()
+		ensures noCollisions()
+		ensures fresh(msg) && fresh(active) && isArray(msg) && isArray(active)
+		ensures forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
+	{
+		// Dafny would have problems verifying this method if we made msg an in-parameter
+		msg := new Message[numVertices];
+		active := new bool[numVertices];
+		forall i | 0 <= i < numVertices { active[i] := false; }
+		assert forall i | 0 <= i < numVertices :: !active[i];
+
+		var src' := 0;
+		var srcIndices := Permutation.Generate(numVertices);
+		// invoke SendMessage on each edage
+		while src' < numVertices
+			invariant src' <= numVertices
+			invariant Permutation.isValid(srcIndices, numVertices)
+			invariant forall i | 0 <= i < src' :: noCollisionAt(srcIndices[i])
+			invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
+		{
+			var src := srcIndices[src'];
+			var dst' := 0;
+			var dstIndices := Permutation.Generate(numVertices);
+			while dst' < numVertices
+				invariant dst' <= numVertices
+				invariant src == srcIndices[src']
+				invariant Permutation.isValid(srcIndices, numVertices)
+				invariant Permutation.isValid(dstIndices, numVertices)
+				invariant forall i | 0 <= i < dst' :: noCollisionBetween(src, dstIndices[i]);
+				invariant forall i | 0 <= i < src' :: noCollisionAt(srcIndices[i])
+				invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
+			{
+				var dst := dstIndices[dst'];
+				if adjacent(src, dst)
+				{
+					var msg' := SendMessage(src, dst, graph[src,dst]);
+					AccumulateMessage(msg, msg', active);
+				}
+				//assert noCollisionBetween(src, dst);
+				dst' := dst' + 1;
+			}
+			NoCollisionPermutationLemma1(src, dstIndices);
+			//assert noCollisionAt(src);
+			src' := src' + 1;
+		}
+		NoCollisionPermutationLemma2(srcIndices);
+		//assert noCollisions();
+	}
+
+	method AccumulateMessage(msg: array<Message>, msg': seq<(VertexId, Message)>, active: array<bool>)
+		requires isArray(msg) && isArray(active) && isArray(vAttr)
+		requires forall m | m in msg' :: isVertex(m.0) && isMessage(m.1)
 		requires forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
 		modifies msg, active
 		ensures forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
 	{
+		var i := 0;
+		while i < |msg'|
+			invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
+		{
+			var m := msg'[i];
+			if active[m.0] {
+				active[m.0] := true;
+				msg[m.0] := m.1;
+			} else {
+				msg[m.0] := MergeMessage(msg[m.0], m.1);
+			}
+			i := i + 1;
+		}
+	}
+
+	method InitializeVertices()
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		requires numVertices > 0
+		modifies vAttr, sent
+		ensures vAttrInvariant()
+		ensures exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]
+	{
 		var vid := 0;
 		while vid < numVertices
 			invariant vid <= numVertices
+			invariant isMatrix(sent) && vid > 0 ==> sent[0,0]
+			invariant forall i | 0 <= i < vid :: isVertexAttr(vAttr[i])
+		{
+			vAttr[vid] := VertexProgram(vid, vAttr[vid], initMsg);
+			sent[vid, vid] := true;
+			vid := vid + 1;
+		}
+	}
+
+	method UpdateVertices(msg: array<Message>, active: array<bool>)
+		requires isArray(msg) && isArray(active) && isArray(vAttr)
+		requires vAttrInvariant()
+		requires forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
+		modifies vAttr
+		ensures vAttrInvariant()
+	{
+		var vid := 0;
+		while vid < numVertices
+			invariant vAttrInvariant()
 			invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
 		{
-			if vid in msg' {
-				if active[vid] {
-					msg[vid] := msg'[vid];
-					active[vid] := true;
-				} else {
-					msg[vid] := MergeMessage(msg[vid], msg'[vid]);
-				}
+			if active[vid] {
+				vAttr[vid] := VertexProgram(vid, vAttr[vid], msg[vid]);
 			}
 			vid := vid + 1;
 		}
