@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.40629.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "dafny-examples", "dafny-examples.csproj", "{C37677B4-4529-4667-AE6F-26802BA755A1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "dafny-playground", "dafny-playground.csproj", "{C37677B4-4529-4667-AE6F-26802BA755A1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
