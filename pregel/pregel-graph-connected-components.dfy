@@ -91,14 +91,22 @@ class PregelConnectedComponentMarkingAlgorithm
 	 * Correctness helper assertions
 	 *******************************/
 
-	method Validated(maxNumIterations: nat) returns (goal: bool)
-		requires numVertices > 1 && maxNumIterations > 0
+	method Validate()
+		requires numVertices > 1
 		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
 		modifies this`numVertices, vAttr, sent
-		ensures goal
 	{
+		var maxNumIterations :| maxNumIterations > 0;
 		var numIterations := pregel(maxNumIterations);
-		goal := numIterations <= maxNumIterations ==> correctlyColored();
+
+		if numIterations < maxNumIterations {
+			assert !active() && noCollisions();
+			CollisionLemma();
+			assert noCollisions'(numVertices, numVertices);
+			ColoringLemma();
+			assert correctlyColored();
+		}
+		assert numIterations < maxNumIterations ==> correctlyColored();
 	}
 
 	function method noCollisions(): bool
@@ -249,7 +257,7 @@ class PregelConnectedComponentMarkingAlgorithm
 		isVertex(msg)
 	}
 
-	predicate isVertexAttr(attr: VertexId)
+	predicate isVertexAttr(attr: VertexAttr)
 		reads this`numVertices
 	{
 		isVertex(attr)
@@ -262,76 +270,35 @@ class PregelConnectedComponentMarkingAlgorithm
 		forall i | 0 <= i < numVertices :: isVertexAttr(vAttr[i])
 	}
 
-	lemma NoCollisionPermutationLemma1(vid: VertexId, indices: array<VertexId>)
-		requires isVertex(vid) && isArray(indices) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
-		requires Permutation.isValid(indices, numVertices)
-		requires forall i :: 0 <= i < numVertices ==> noCollisionBetween(vid, indices[i])
-		ensures noCollisionAt(vid)
-	{
-		var i := 0;
-		while i < numVertices
-			invariant i <= numVertices;
-			invariant Permutation.isValid(indices, numVertices)
-			invariant forall j | 0 <= j < i :: noCollisionBetween(vid, j)
-		{
-			assert i in indices[..];
-			assert noCollisionBetween(vid, i);
-			i := i + 1;
-		}
-	}
-
-	lemma NoCollisionPermutationLemma2(indices: array<VertexId>)
-		requires isArray(indices) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
-		requires Permutation.isValid(indices, numVertices)
-		requires forall i :: 0 <= i < numVertices ==> noCollisionAt(indices[i])
-		ensures noCollisions()
-	{
-		var i := 0;
-		while i < numVertices
-			invariant i <= numVertices;
-			invariant Permutation.isValid(indices, numVertices)
-			invariant forall j | 0 <= j < i :: noCollisionAt(j)
-		{
-			assert i in indices[..];
-			assert noCollisionAt(i);
-			i := i + 1;
-		}
-	}
-
 	method pregel(maxNumIterations: nat) returns (numIterations: nat)
 		requires numVertices > 1 && maxNumIterations > 0
 		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
 		modifies vAttr, sent
-		ensures numIterations <= maxNumIterations ==> correctlyColored()
+		ensures numIterations < maxNumIterations ==> !active() && noCollisions()
 	{
 		InitializeVertices();
 
 		numIterations := 0;
 
-		while (exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) && numIterations <= maxNumIterations
+		while (exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) && numIterations < maxNumIterations
 			invariant !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions()
 			invariant vAttrInvariant()
 		{
-			var msg,active := AggregateMessages();
-			//assert noCollisions();
+			var msg,active' := AggregateMessages();
 
 			if exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
 				ghost var src',dst' :| 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
 
-				UpdateVertices(msg, active);
+				UpdateVertices(msg, active');
 
 				assert vAttrInvariant();
 				assert 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
 			}
-
 			numIterations := numIterations + 1;
 		}
-		//assert !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> noCollisions();
-
-		CollisionLemma(); ColoringLemma();
-
-		assert !(exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]) ==> correctlyColored();
+		assert numIterations < maxNumIterations ==> !active();
+		assert !active() ==> noCollisions();
 	}
 
 	method AggregateMessages() returns (msg: array<Message>, active: array<bool>)
@@ -351,7 +318,7 @@ class PregelConnectedComponentMarkingAlgorithm
 
 		var src' := 0;
 		var srcIndices := Permutation.Generate(numVertices);
-		// invoke SendMessage on each edage
+		// invoke SendMessage on each edge
 		while src' < numVertices
 			invariant src' <= numVertices
 			invariant Permutation.isValid(srcIndices, numVertices)
@@ -414,7 +381,7 @@ class PregelConnectedComponentMarkingAlgorithm
 		requires numVertices > 0
 		modifies vAttr, sent
 		ensures vAttrInvariant()
-		ensures exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]
+		ensures active()
 	{
 		var vid := 0;
 		while vid < numVertices
@@ -450,7 +417,7 @@ class PregelConnectedComponentMarkingAlgorithm
 	method ResetSentMatrix()
 		requires isMatrix(sent)
 		modifies sent
-		ensures forall i,j | 0 <= i < numVertices && 0 <= j < numVertices :: !sent[i,j]
+		ensures !active()
 	{
 		var src := 0;
 		while src < numVertices
@@ -467,6 +434,42 @@ class PregelConnectedComponentMarkingAlgorithm
 				dst := dst + 1;
 			}
 			src := src + 1;
+		}
+	}
+
+	lemma NoCollisionPermutationLemma1(vid: VertexId, indices: array<VertexId>)
+		requires isVertex(vid) && isArray(indices) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		requires Permutation.isValid(indices, numVertices)
+		requires forall i :: 0 <= i < numVertices ==> noCollisionBetween(vid, indices[i])
+		ensures noCollisionAt(vid)
+	{
+		var i := 0;
+		while i < numVertices
+			invariant i <= numVertices;
+			invariant Permutation.isValid(indices, numVertices)
+			invariant forall j | 0 <= j < i :: noCollisionBetween(vid, j)
+		{
+			assert i in indices[..];
+			assert noCollisionBetween(vid, i);
+			i := i + 1;
+		}
+	}
+
+	lemma NoCollisionPermutationLemma2(indices: array<VertexId>)
+		requires isArray(indices) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		requires Permutation.isValid(indices, numVertices)
+		requires forall i :: 0 <= i < numVertices ==> noCollisionAt(indices[i])
+		ensures noCollisions()
+	{
+		var i := 0;
+		while i < numVertices
+			invariant i <= numVertices;
+			invariant Permutation.isValid(indices, numVertices)
+			invariant forall j | 0 <= j < i :: noCollisionAt(j)
+		{
+			assert i in indices[..];
+			assert noCollisionAt(i);
+			i := i + 1;
 		}
 	}
 }

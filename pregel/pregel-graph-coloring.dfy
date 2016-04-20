@@ -195,7 +195,7 @@ class PregelGraphColoring
 				sent[i,j] := false;
 			}
 			var src := 0;
-			/* invoke SendMessage on each edage */
+			/* invoke SendMessage on each edge */
 			while src < numVertices
 				invariant src <= numVertices
 				invariant forall vid :: 0 <= vid < src ==> noCollisionAt(vid)

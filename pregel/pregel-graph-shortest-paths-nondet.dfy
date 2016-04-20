@@ -276,7 +276,7 @@ class PregelBellmanFordAlgorithm
 					invariant dst <= numVertices
 					invariant noCollisionsInductive(src, dst)
 					invariant forall vid | 0 <= vid < dst ::
-					(src == vid ==> vAttr[src,vid] == 0) &&
+						(src == vid ==> vAttr[src,vid] == 0) &&
 						(adjacent(src, vid) && !sent[src,vid] && !sent[vid,src] ==>
 							forall i | 0 <= i < numVertices :: vAttr[src,i] <= vAttr[vid,i] + 1)
 				{
@@ -481,7 +481,7 @@ class PregelBellmanFordAlgorithm
 		assert MsgInvariant(vid, res);
 	}
 
-	method Pregel(maxNumIterations: nat) returns (numIterations: nat)
+	method {:verify false} Pregel(maxNumIterations: nat) returns (numIterations: nat)
 		requires numVertices > 0
 		requires GraphInvariant()
 		modifies vAttr, msg, sent
@@ -518,7 +518,7 @@ class PregelBellmanFordAlgorithm
 			ResetSentMatrix();
 
 			src := 0;
-			/* invoke SendMessage on each edage */
+			/* invoke SendMessage on each edge */
 			while src < numVertices
 				invariant src <= numVertices
 				invariant forall vid | 0 <= vid < src :: noCollisionAt(vid)

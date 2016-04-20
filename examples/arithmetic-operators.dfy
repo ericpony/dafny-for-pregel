@@ -1,7 +1,7 @@
 ﻿/**
-	* Source:
-	* http://dafny.codeplex.com/workitem/157
-	*/
+  * Source:
+  * http://dafny.codeplex.com/workitem/157
+  */
 
 function add(e1:int, e2:int) : int {
 	e1 + e2
