@@ -31,6 +31,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="examples\arithmetic-operators.dfy" />
     <None Include="examples\binary-search.dfy" />
     <None Include="examples\graph-connectivity.dfy" />
     <None Include="examples\insertion-sort.dfy" />
@@ -62,6 +63,7 @@
     <None Include="pregel\pregel-graph-coloring.dfy" />
     <None Include="pregel\pregel-graph-shortest-paths-nondet-v2.dfy" />
     <None Include="pregel\pregel-graph-connected-components.dfy" />
+    <None Include="pregel\pregel-graph-shortest-paths-nondet-v3.dfy" />
     <None Include="pregel\pregel-graph-shortest-paths-nondet.dfy" />
     <None Include="pregel\pregel-graph-shortest-paths.dfy" />
     <None Include="test.dfy" />
