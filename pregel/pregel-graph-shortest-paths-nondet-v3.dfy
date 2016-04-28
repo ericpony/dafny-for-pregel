@@ -19,6 +19,7 @@ class PregelBellmanFordAlgorithm
 	var graph: array2<EdgeAttr>;
 	var sent: array2<bool>;
 	var vAttr: array<VertexAttr>;
+	var NoEdge: EdgeAttr
 
 	/**
 	 * The SendMessage, MergeMessage and VertexProgram functions of the framework.
@@ -32,7 +33,7 @@ class PregelBellmanFordAlgorithm
 		requires adjacent(src, dst)
 		modifies sent
 		ensures consistent()
-		ensures forall m | m in msg :: isVertex(m.0) && isMessage(m.1, m.0)
+		ensures forall m | m in msg :: isVertex(m.0) && isMessageFor(m.1, m.0)
 		ensures sent[dst,src] <==> exists j | 0 <= j < numVertices :: vAttr[src][j] > vAttr[dst][j] + 1
 	{
 		sent[src,dst] := false;
@@ -83,7 +84,7 @@ class PregelBellmanFordAlgorithm
 	method VertexProgram(vid: VertexId, attr: VertexAttr, msg: Message) returns (attr': VertexAttr)
 		requires isVertex(vid) && isArray(vAttr) && GraphInvariant0()
 		requires msg != initMsg ==> isVertexAttr(vid, attr)
-		requires msg != initMsg ==> isMessage(msg, vid)
+		requires msg != initMsg ==> isMessageFor(msg, vid)
 		ensures GraphInvariant0()
 		ensures isVertexAttr(vid, attr') && isConsistentAt(vid, attr')
 	{
@@ -118,7 +119,7 @@ class PregelBellmanFordAlgorithm
 
 	predicate DistancesComputed()
 		requires isArray(vAttr) && GraphInvariant0()
-		reads this`graph, this`vAttr, this`sent, this`numVertices, this`Infinity, vAttr, vAttr[..]
+		reads this`graph, this`vAttr, this`sent, this`numVertices, this`NoEdge, this`Infinity, vAttr, vAttr[..]
 	{
 		DistancesComputed'(numVertices)
 	}
@@ -126,7 +127,7 @@ class PregelBellmanFordAlgorithm
 	predicate DistancesComputed'(dist: nat)
 		requires isArray(vAttr) && GraphInvariant0()
 		requires 0 <= dist < Infinity
-		reads this`graph, this`vAttr, this`sent, this`numVertices, this`Infinity, vAttr, vAttr[..]
+		reads this`graph, this`vAttr, this`sent, this`numVertices, this`NoEdge, this`Infinity, vAttr, vAttr[..]
 	{
 		forall i,j | 0 <= i < numVertices && 0 <= j < numVertices ::
 			(connected'(i, j, dist) ==> 0 <= vAttr[i][j] <= dist)
@@ -158,21 +159,21 @@ class PregelBellmanFordAlgorithm
 
 	predicate noCollisions()
 		requires isArray(vAttr) && GraphInvariant0()
-		reads this`graph, this`vAttr, this`sent, this`numVertices, this`Infinity, vAttr, vAttr[..]
+		reads this`graph, this`vAttr, this`sent, this`numVertices, this`NoEdge, this`Infinity, vAttr, vAttr[..]
 	{
 		forall vid | 0 <= vid < numVertices :: noCollisionsAt(vid)
 	}
 
 	predicate noCollisionsAt(src: VertexId)
 		requires isVertex(src) requires isArray(vAttr) && GraphInvariant0()
-		reads this`graph, this`vAttr, this`sent, this`numVertices, this`Infinity, vAttr, vAttr[..]
+		reads this`graph, this`vAttr, this`sent, this`numVertices, this`NoEdge, this`Infinity, vAttr, vAttr[..]
 	{
 		forall dst | 0 <= dst < numVertices :: noCollisionBetween(src, dst)
 	}
 
 	predicate noCollisionBetween(src: VertexId, dst: VertexId)
 		requires isVertex(src) && isVertex(dst) && isArray(vAttr) && GraphInvariant0()
-		reads this`graph, this`vAttr, this`sent, this`numVertices, this`Infinity, vAttr, vAttr[..]
+		reads this`graph, this`vAttr, this`sent, this`numVertices, this`NoEdge, this`Infinity, vAttr, vAttr[..]
 	{
 		(src == dst ==> vAttr[src][dst] == 0)
 		&&
@@ -182,7 +183,7 @@ class PregelBellmanFordAlgorithm
 
 	predicate consistent()
 		requires isArray(vAttr) && GraphInvariant0()
-		reads this`graph, this`vAttr, this`sent, this`numVertices, this`Infinity, vAttr, vAttr[..]
+		reads this`graph, this`vAttr, this`sent, this`numVertices, this`NoEdge, this`Infinity, vAttr, vAttr[..]
 	{
 		(forall i | 0 <= i < numVertices :: vAttr[i][i] == 0)
 		&&
@@ -192,7 +193,7 @@ class PregelBellmanFordAlgorithm
 
 	predicate isConsistentAt(vid: VertexId, dist: array<Distance>)
 		requires  isMatrix(graph) && isVertex(vid) && isArray(dist)
-		reads this`graph, this`numVertices, dist
+		reads this`graph, this`NoEdge, this`numVertices, dist
 	{
 		forall dst | 0 <= dst < numVertices ::
 			dist[dst] <= numVertices ==> connected'(vid, dst, dist[dst])
@@ -201,7 +202,7 @@ class PregelBellmanFordAlgorithm
 	predicate noCollisionsInductive(srcBound: VertexId, dstBound: VertexId)
 		requires srcBound <= numVertices && dstBound <= numVertices
 		requires isArray(vAttr) && GraphInvariant0()
-		reads this`graph, this`vAttr, this`sent, this`numVertices, this`Infinity, vAttr, vAttr[..]
+		reads this`graph, this`vAttr, this`sent, this`numVertices, this`NoEdge, this`Infinity, vAttr, vAttr[..]
 	{
 		forall src,dst | 0 <= src < srcBound && 0 <= dst < dstBound ::
 			(src == dst ==> vAttr[src][dst] == 0)
@@ -299,22 +300,22 @@ class PregelBellmanFordAlgorithm
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
 		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
-		reads this`graph, this`numVertices
+		reads this`graph, this`NoEdge, this`numVertices
 	{
-		graph[src,dst] != 0.0
+		graph[src,dst] != NoEdge
 	}
 
 	/* Check if dst is reachable from src. */
 	predicate connected(src: VertexId, dst: VertexId)
 		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
-		reads this`graph, this`numVertices
+		reads this`graph, this`NoEdge, this`numVertices
 	{
 		exists d :: 0 <= d <= numVertices && connected'(src, dst, d)
 	}
 
 	predicate connected'(src: VertexId, dst: VertexId, dist: int)
 		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
-		reads this`graph, this`numVertices
+		reads this`graph, this`NoEdge, this`numVertices
 		decreases dist
 	{
 		if dist < 0 then
@@ -348,16 +349,16 @@ class PregelBellmanFordAlgorithm
 		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices
 	}
 
-	predicate isMessage(msg: array<Distance>, vid: VertexId)
+	predicate isMessageFor(msg: array<Distance>, vid: VertexId)
 		requires isVertex(vid) && isMatrix(graph)
-		reads this`graph, this`numVertices, msg
+		reads this`graph, this`NoEdge, this`numVertices, msg
 	{
 		isArray(msg) && isConsistentAt(vid, msg)
 	}
 
 	predicate isVertexAttr(vid: VertexId, attr: VertexAttr)
 		requires isVertex(vid) && isMatrix(graph)
-		reads this`graph, this`numVertices, this`Infinity, attr
+		reads this`graph, this`numVertices, this`NoEdge, this`Infinity, attr
 	{
 		isArray(attr)
 		&&
@@ -368,11 +369,11 @@ class PregelBellmanFordAlgorithm
 		isConsistentAt(vid, attr)
 	}
 
-	predicate MsgInvariant(msg: array<Message>, active: array<bool>)
-		requires isArray(msg) && isArray(active) && isMatrix(graph)
-		reads this`graph, this`numVertices, active, msg, msg[..]
+	predicate MsgInvariant(msgArray: array<Message>, active: array<bool>)
+		requires isArray(msgArray) && isArray(active) && isMatrix(graph)
+		reads this`graph, this`NoEdge, this`numVertices, active, msgArray, msgArray[..]
 	{
-		forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i], i)
+		forall i | 0 <= i < numVertices :: active[i] ==> isMessageFor(msgArray[i], i)
 	}
 
 	predicate GraphInvariant0()
@@ -423,17 +424,17 @@ class PregelBellmanFordAlgorithm
 		}
 	}
 
-	method AggregateMessages() returns (msg: array<Message>, active: array<bool>)
+	method AggregateMessages() returns (msgArray: array<Message>, active: array<bool>)
 		requires isArray(vAttr)
 		requires GraphInvariant()
 		requires consistent()
 		modifies sent
 		ensures noCollisions() && consistent()
-		ensures fresh(msg) && fresh(active) && isArray(msg) && isArray(active)
-		ensures MsgInvariant(msg, active)
+		ensures fresh(msgArray) && fresh(active) && isArray(msgArray) && isArray(active)
+		ensures MsgInvariant(msgArray, active)
 	{
 		// Dafny would have problems verifying this method if we made msg an in-parameter
-		msg := new Message[numVertices];
+		msgArray := new Message[numVertices];
 		active := new bool[numVertices];
 		forall i | 0 <= i < numVertices { active[i] := false; }
 		assert forall i | 0 <= i < numVertices :: !active[i];
@@ -443,7 +444,7 @@ class PregelBellmanFordAlgorithm
 		// invoke SendMessage on each edge
 		while src' < numVertices
 			invariant src' <= numVertices
-			invariant MsgInvariant(msg, active)
+			invariant MsgInvariant(msgArray, active)
 			invariant Permutation.isValid(srcIndices, numVertices)
 			invariant forall i | 0 <= i < src' :: noCollisionsAt(srcIndices[i])
 		{
@@ -453,7 +454,7 @@ class PregelBellmanFordAlgorithm
 			while dst' < numVertices
 				invariant dst' <= numVertices
 				invariant src == srcIndices[src']
-				invariant MsgInvariant(msg, active)
+				invariant MsgInvariant(msgArray, active)
 				invariant Permutation.isValid(srcIndices, numVertices)
 				invariant Permutation.isValid(dstIndices, numVertices)
 				invariant forall i | 0 <= i < dst' :: noCollisionBetween(src, dstIndices[i]);
@@ -463,7 +464,7 @@ class PregelBellmanFordAlgorithm
 				if adjacent(src, dst)
 				{
 					var msg' := SendMessage(src, dst, graph[src,dst]);
-					AccumulateMessage(msg, msg', active);
+					AccumulateMessage(msgArray, msg', active);
 				}
 				//assert noCollisionBetween(src, dst);
 				dst' := dst' + 1;
@@ -476,26 +477,25 @@ class PregelBellmanFordAlgorithm
 		//assert noCollisions();
 	}
 
-	method AccumulateMessage(msg: array<Message>, msg': seq<(VertexId, Message)>, active: array<bool>)
-		requires isArray(msg) && isArray(active) && isArray(vAttr)
-		requires GraphInvariant()
-		requires MsgInvariant(msg, active)
-		requires forall m | m in msg' :: isVertex(m.0) && isMessage(m.1, m.0)
-		modifies msg, active
-		ensures MsgInvariant(msg, active)
+	method AccumulateMessage(msgArray: array<Message>, msg': seq<(VertexId, Message)>, active: array<bool>)
+		requires isMatrix(graph) && isArray(msgArray) && isArray(active)
+		requires MsgInvariant(msgArray, active)
+		requires forall m | m in msg' :: isVertex(m.0) && isMessageFor(m.1, m.0)
+		modifies msgArray, active
+		ensures MsgInvariant(msgArray, active)
 	{
 		var i := 0;
 		while i < |msg'|
-			invariant MsgInvariant(msg, active)
+			invariant MsgInvariant(msgArray, active)
 		{
 			var m := msg'[i];
 			if !active[m.0] {
 				active[m.0] := true;
-				msg[m.0] := m.1;
+				msgArray[m.0] := m.1;
 			} else {
-				msg[m.0] := MergeMessage(msg[m.0], m.1);
+				msgArray[m.0] := MergeMessage(msgArray[m.0], m.1);
 			}
-			assert isMessage(msg[m.0], m.0);
+			assert isMessageFor(msgArray[m.0], m.0);
 			i := i + 1;
 		}
 	}
@@ -523,10 +523,10 @@ class PregelBellmanFordAlgorithm
 		}
 	}
 
-	method UpdateVertices(msg: array<Message>, active: array<bool>)
-		requires isArray(msg) && isArray(active) && isArray(vAttr)
+	method UpdateVertices(msgArray: array<Message>, active: array<bool>)
+		requires isArray(msgArray) && isArray(active) && isArray(vAttr)
 		requires GraphInvariant()
-		requires MsgInvariant(msg, active)
+		requires MsgInvariant(msgArray, active)
 		requires consistent()
 		modifies vAttr
 		ensures GraphInvariant()
@@ -536,10 +536,10 @@ class PregelBellmanFordAlgorithm
 		while vid < numVertices
 			invariant GraphInvariant0() && vAttrInvariant()
 			invariant consistent()
-			invariant forall i | 0 <= i < numVertices :: active[i] ==> isArray(msg[i])
+			invariant forall i | vid <= i < numVertices :: active[i] ==> isMessageFor(msgArray[i], i)
 		{
 			if active[vid] {
-				vAttr[vid] := VertexProgram(vid, vAttr[vid], msg[vid]);
+				vAttr[vid] := VertexProgram(vid, vAttr[vid], msgArray[vid]);
 				assert isVertexAttr(vid, vAttr[vid]);
 			}
 			vid := vid + 1;
