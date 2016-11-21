@@ -103,7 +103,7 @@ class PregelGraphColoring
 
 	function method active(): bool
 		requires valid2(sent)
-		reads this`sent, this`numVertices
+		reads this`sent, sent, this`numVertices
 	{
 		exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 	}
@@ -135,7 +135,7 @@ class PregelGraphColoring
 
 	predicate inv()
 		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, sent
 	{
 		!active() ==> correctlyColored()
 	}
@@ -192,8 +192,10 @@ class PregelGraphColoring
 
 			if exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 			{
+				assert active();
 				var dst := 0;
 				while dst < numVertices
+					invariant active()
 				{
 					// Did some vertex send a message to dst?
 					if exists src :: 0 <= src < numVertices && sent[src,dst]
@@ -201,8 +203,10 @@ class PregelGraphColoring
 						var activated := false;
 						var message: Message;
 						var src := 0;
+						ghost var src', dst' :| 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
 						// aggregate the messages sent to dst
 						while src < numVertices
+							invariant active()
 						{
 							if sent[src,dst]
 							{
@@ -220,12 +224,13 @@ class PregelGraphColoring
 						}
 						// update vertex state according to the result of merges
 						VertexProgram(dst, message);
+						assert sent[src',dst'];						
 					}
 					dst := dst + 1;
 				}
 				assert active();
 			}
-			assert !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions();
+			assert !active() ==> noCollisions();
 			numIterations := numIterations + 1;
 		}
 		assert numIterations <= maxNumIterations ==> !active();		

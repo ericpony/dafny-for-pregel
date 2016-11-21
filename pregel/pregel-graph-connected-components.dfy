@@ -366,7 +366,7 @@ class PregelConnectedComponentMarkingAlgorithm
 			invariant forall i | 0 <= i < numVertices :: active[i] ==> isMessage(msg[i])
 		{
 			var m := msg'[i];
-			if active[m.0] {
+			if !active[m.0] {
 				active[m.0] := true;
 				msg[m.0] := m.1;
 			} else {

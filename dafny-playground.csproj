@@ -31,6 +31,8 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="examples\total-preorder.dfy" />
+    <None Include="examples\swap-sections.dfy" />
     <None Include="examples\arithmetic-operators.dfy" />
     <None Include="examples\binary-search.dfy" />
     <None Include="examples\graph-connectivity.dfy" />
@@ -40,6 +42,7 @@
     <None Include="examples\merge-disjoint-maps.dfy" />
     <None Include="examples\nested-loop.dfy" />
     <None Include="examples\permutation.dfy" />
+    <None Include="issues\dafny-bug-equivalent-if-conditions - 複製.dfy" />
     <None Include="issues\dafny-bug-existential-assertion.dfy" />
     <None Include="issues\dafny-bug-existential-loop-condition.dfy" />
     <None Include="issues\dafny-bug-existential-predicate.dfy" />
@@ -58,15 +61,18 @@
     <None Include="legacy\pregel-graph-shortest-paths.2016-04-12.dfy" />
     <None Include="legacy\pregel-graph-shortest-paths.2016-04-13.dfy" />
     <None Include="legacy\pregel-graph-shortest-paths.2016-04-14.dfy" />
+    <None Include="pregel\skeleton\nondet-permutation.dfy" />
     <None Include="pregel\nondet-permutation.dfy" />
+    <None Include="pregel\skeleton\pregel-skeleton.dfy" />
     <None Include="pregel\pregel-graph-coloring-nondet.dfy" />
     <None Include="pregel\pregel-graph-coloring.dfy" />
     <None Include="pregel\pregel-graph-shortest-paths-nondet-v2.dfy" />
     <None Include="pregel\pregel-graph-connected-components.dfy" />
+    <None Include="pregel\pregel-graph-shortest-paths-nondet-v3-framework.dfy" />
     <None Include="pregel\pregel-graph-shortest-paths-nondet-v3.dfy" />
     <None Include="pregel\pregel-graph-shortest-paths-nondet.dfy" />
     <None Include="pregel\pregel-graph-shortest-paths.dfy" />
-    <None Include="test.dfy" />
+    <None Include="issues\dafny-bug-equivalent-if-conditions.dfy" />
     <None Include="legacy\pregel-graph-coloring-bug.dfy" />
     <None Include="testcases\cloudmake\CloudMake-CachedBuilds.dfy" />
     <None Include="testcases\cloudmake\CloudMake-CachedBuilds.dfy.expect" />
@@ -870,6 +876,7 @@
     <Compile Include="testcases\dafny0\Extern2.cs" />
     <Compile Include="testcases\dafny0\ExternHelloLibrary.cs" />
   </ItemGroup>
+  <ItemGroup />
   <Target Name="BuildTarget">
     <Message Text="Build selected" Importance="high" />
   </Target>

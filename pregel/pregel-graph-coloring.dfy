@@ -71,7 +71,7 @@ class PregelGraphColoring
 		modifies this`numVertices, vAttr, msg, sent
 		ensures goal
 	{
-		var numIterations := pregel(maxNumIterations);
+		var numIterations := Pregel(maxNumIterations);
 		goal := numIterations <= maxNumIterations ==> correctlyColored();
 	}
 
@@ -139,7 +139,7 @@ class PregelGraphColoring
 
 	function method active(): bool
 		requires valid2(sent)
-		reads this`sent, this`numVertices
+		reads this`sent, sent, this`numVertices
 	{
 		exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 	}
@@ -169,7 +169,7 @@ class PregelGraphColoring
 		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices
 	}
 
-	method pregel(maxNumIterations: nat) returns (numIterations: nat)
+	method Pregel(maxNumIterations: nat) returns (numIterations: nat)
 		requires numVertices > 1 && maxNumIterations > 0
 		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
 		modifies vAttr, msg, sent
@@ -187,8 +187,8 @@ class PregelGraphColoring
 
 		numIterations := 0;
 
-		while (exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) && numIterations <= maxNumIterations
-			invariant !(exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]) ==> noCollisions()
+		while active() && numIterations <= maxNumIterations
+			invariant !active() ==> noCollisions()
 		{
 			forall i,j | 0 <= i < numVertices && 0 <= j < numVertices
 			{
@@ -219,49 +219,43 @@ class PregelGraphColoring
 			}
 			assert noCollisions();
 
-			if exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
+			/* Did some vertex send a message to dst? */
+			if active()
 			{
+				//var src',dst' :| 0 <= src' < numVertices && 0 <= dst' < numVertices && sent[src',dst'];
 				var dst := 0;
 				while dst < numVertices
+					invariant active()
 				{
-					/* Did some vertex send a message to dst? */
-					if exists src :: 0 <= src < numVertices && sent[src,dst]
+					var activated := false;
+					var message: Message;
+					var src := 0;
+					/* aggregate the messages sent to dst */
+					while src < numVertices
+						invariant active()
 					{
-						var activated := false;
-						var message: Message;
-						var src := 0;
-						/* aggregate the messages sent to dst */
-						while src < numVertices
+						if sent[src,dst]
 						{
-							if sent[src,dst]
+							if !activated
 							{
-								if !activated
-								{
-									/* keep the first message as is */
-									message := msg[src,dst];
-									activated := true;
-								} else {
-									/* merge the new message with the old one */
-									message := MergeMessage(message, msg[src,dst]);
-								}
+								/* keep the first message as is */
+								message := msg[src,dst];
+								activated := true;
+							} else {
+								/* merge the new message with the old one */
+								message := MergeMessage(message, msg[src,dst]);
 							}
-							src := src + 1;
 						}
-						/* update vertex state according to the result of merges */
-						vAttr[dst] := VertexProgram(dst, vAttr[dst], message);
+						src := src + 1;
 					}
+					/* update vertex state according to the result of merges */
+					vAttr[dst] := VertexProgram(dst, vAttr[dst], message);
 					dst := dst + 1;
 				}
-				/* This hack can be removed after bug https://dafny.codeplex.com/workitem/144 is fixed. */
-				assume exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j];
 			}
 			numIterations := numIterations + 1;
 		}
-		//assert numIterations <= maxNumIterations ==> noCollisions();
 		CollisionLemma();
-		//assert numIterations <= maxNumIterations ==> !active();
-		//assert !active() && noCollisions() ==> correctlyColored();
-		//assert numIterations <= maxNumIterations ==> correctlyColored();
 	}
 
 	lemma witness_for_existence()
