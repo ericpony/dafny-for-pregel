@@ -3,14 +3,14 @@
 	/**
 	 * Given n >= 0, generate a permuation of {0,...,n-1} nondeterministically.
 	 */
-	method Generate(n: int) returns (perm: array<int>)
-		requires n >= 0
+	method Generate(n: nat) returns (perm: array<int>)
+		//requires n >= 0
 		ensures perm != null
 		ensures perm.Length == n
 		ensures fresh(perm)
 		ensures isValid(perm, n)
 	{
-		var all := set x | 0 <= x < n;
+		var all := set x | p(x) && 0 <= x < n;
 		var used := {};
 		perm := new int[n];
 
@@ -24,7 +24,8 @@
 			decreases |all| - |used|
 		{
 			CardinalityOrderingLemma(used, all);
-
+			NonemptySetLemma(all - used);
+			assert exists x | p(x) :: x in (all - used);
 			var dst :| dst in all && dst !in used;
 			perm[|used|] := dst;
 			used := used + {dst};
@@ -32,6 +33,13 @@
 		assert used == all;
 		print perm;
 	}
+
+	lemma NonemptySetLemma(s: set<int>)
+		requires s != {};
+		ensures exists x | p(x) :: x in s
+
+	/* A hack to evade the "No terms found to trigger on" warning */
+	function method p(x: int): bool { true }
 
 	predicate isValid(a: array<int>, n: nat)
 		requires a != null && a.Length == n
@@ -60,11 +68,11 @@
 
 	lemma CardinalityLemma (size: int, s: set<int>)
 		requires size >= 0
-		requires s == set x | 0 <= x < size
+		requires s == set x | p(x) && 0 <= x < size
 		ensures	size == |s|
 	{
 		if(size == 0) {
-			assert size == |(set x | 0 <= x < size)|;
+			assert size == |(set x | p(x) && 0 <= x < size)|;
 		} else {
 			CardinalityLemma(size - 1, s - {size - 1});
 		}

@@ -56,7 +56,7 @@ class PregelGraphColoring
 
 	function method correctlyColored(): bool
 		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads this`graph, this`vAttr, this`sent, this`numVertices, graph, vAttr
 	{
 		// adjacent vertices have different colors
 		forall i,j :: 0 <= i < numVertices && 0 <= j < numVertices ==>
@@ -79,21 +79,21 @@ class PregelGraphColoring
 
 	function method noCollisions(): bool
 		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads this`graph, this`vAttr, this`sent, this`numVertices, sent, graph, vAttr
 	{
 		forall vid :: 0 <= vid < numVertices ==> noCollisionAt(vid)
 	}
 
 	function method noCollisionAt(src: VertexId): bool
 		requires valid0(src) && valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		reads this`graph, this`sent, this`vAttr, this`numVertices, sent, graph, vAttr
 	{
 		forall dst :: 0 <= dst < numVertices ==> noCollisionBetween(src, dst)
 	}
 
 	function method noCollisionBetween(src: VertexId, dst: VertexId): bool
 		requires valid0(src) && valid0(dst) && valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		reads this`graph, this`sent, this`vAttr, this`numVertices, graph, sent, vAttr
 	{
 		adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst]
 	}
@@ -101,7 +101,7 @@ class PregelGraphColoring
 	function method noCollisions'(srcBound: VertexId, dstBound: VertexId): bool
 		requires srcBound <= numVertices && dstBound <= numVertices
 		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph, sent
 	{
 		forall src,dst :: 0 <= src < srcBound && 0 <= dst < dstBound ==>
 			(adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst])
@@ -141,14 +141,14 @@ class PregelGraphColoring
 
 	function method active(): bool
 		requires valid2(sent)
-		reads this`sent, this`numVertices
+		reads this`sent, this`numVertices, sent
 	{
 		exists i, j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 	}
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
 		requires valid2(graph) && valid0(src) && valid0(dst)
-		reads this`graph, this`numVertices
+		reads this`graph, this`numVertices, graph
 	{
 		graph[src,dst] != 0.0
 	}

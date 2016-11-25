@@ -17,11 +17,15 @@ class PregelGraphColoring
 	 **************************************/
 
 	method SendMessage(src: VertexId, dst: VertexId, w: Weight)
-		requires valid1(vAttr) && valid2(sent) && valid2(msg)
-		requires valid0(src) && valid0(dst)
+		requires isArray(vAttr) && isMatrix(sent) && isMatrix(graph) && isMatrix(msg)
+		requires isVertex(src) && isVertex(dst)
+		requires forall vid :: 0 <= vid < src ==> noCollisionAt(vid)
+		requires forall vid :: 0 <= vid < dst ==> noCollisionBetween(src, vid);
 		modifies msg, sent
 		ensures sent[src, dst] ==> vAttr[src] == vAttr[dst];
 		ensures !sent[src, dst] ==> vAttr[src] != vAttr[dst];
+		ensures forall vid :: 0 <= vid < src ==> noCollisionAt(vid)
+		ensures forall vid :: 0 <= vid < dst ==> noCollisionBetween(src, vid);
 	{
 		if vAttr[src] == vAttr[dst] {
 			sent[src,dst] := true;
@@ -37,7 +41,7 @@ class PregelGraphColoring
 	function method MergeMessage(a: Message, b: Message): bool { a || b }
 
 	method VertexProgram(vid: VertexId, state: Color, msg: Message) returns (state': Color)
-		requires valid0(vid) && valid1(vAttr)
+		requires isVertex(vid) && isArray(vAttr)
 	{
 		if msg == true {
 			// choose a different color nondeterministically
@@ -53,8 +57,8 @@ class PregelGraphColoring
 	 ************************/
 
 	function method correctlyColored(): bool
-		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph, sent
 	{
 		// adjacent vertices have different colors
 		forall i,j :: 0 <= i < numVertices && 0 <= j < numVertices ==>
@@ -67,7 +71,7 @@ class PregelGraphColoring
 
 	method Validated(maxNumIterations: nat) returns (goal: bool)
 		requires numVertices > 1 && maxNumIterations > 0
-		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent) && isMatrix(msg)
 		modifies this`numVertices, vAttr, msg, sent
 		ensures goal
 	{
@@ -76,37 +80,37 @@ class PregelGraphColoring
 	}
 
 	function method noCollisions(): bool
-		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph, sent
 	{
 		forall vid :: 0 <= vid < numVertices ==> noCollisionAt(vid)
 	}
 
 	function method noCollisionAt(src: VertexId): bool
-		requires valid0(src) && valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		requires isVertex(src) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr, graph, sent
 	{
 		forall dst :: 0 <= dst < numVertices ==> noCollisionBetween(src, dst)
 	}
 
 	function method noCollisionBetween(src: VertexId, dst: VertexId): bool
-		requires valid0(src) && valid0(dst) && valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		requires isVertex(src) && isVertex(dst) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr, graph, sent
 	{
 		adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst]
 	}
 
 	function method noCollisions'(srcBound: VertexId, dstBound: VertexId): bool
 		requires srcBound <= numVertices && dstBound <= numVertices
-		requires valid1(vAttr) && valid2(graph) && valid2(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph, sent
 	{
 		forall src,dst :: 0 <= src < srcBound && 0 <= dst < dstBound ==>
 			(adjacent(src, dst) && !sent[src, dst] ==> vAttr[src] != vAttr[dst])
 	}
 
 	lemma CollisionLemma()
-		requires valid1(vAttr) && valid2(graph) && valid2(sent)
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
 		ensures noCollisions() ==> noCollisions'(numVertices, numVertices)
 	{
 		if noCollisions()
@@ -138,32 +142,32 @@ class PregelGraphColoring
 	 ******************/
 
 	function method active(): bool
-		requires valid2(sent)
+		requires isMatrix(sent)
 		reads this`sent, sent, this`numVertices
 	{
 		exists i,j :: 0 <= i < numVertices && 0 <= j < numVertices && sent[i,j]
 	}
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
-		requires valid2(graph) && valid0(src) && valid0(dst)
-		reads this`graph, this`numVertices
+		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
+		reads this`graph, this`numVertices, graph
 	{
 		graph[src,dst] != 0.0
 	}
 
-	predicate valid0(vid: int)
+	predicate isVertex(vid: int)
 		reads this`numVertices
 	{
 		0 <= vid < numVertices
 	}
 
-	predicate valid1<T> (arr: array<T>)
+	predicate isArray<T> (arr: array<T>)
 		reads this`numVertices
 	{
 		arr != null && arr.Length == numVertices
 	}
 
-	predicate valid2<T> (mat: array2<T>)
+	predicate isMatrix<T> (mat: array2<T>)
 		reads this`numVertices
 	{
 		mat != null && mat.Length0 == numVertices && mat.Length1 == numVertices
@@ -171,7 +175,7 @@ class PregelGraphColoring
 
 	method Pregel(maxNumIterations: nat) returns (numIterations: nat)
 		requires numVertices > 1 && maxNumIterations > 0
-		requires valid1(vAttr) && valid2(graph) && valid2(sent) && valid2(msg)
+		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent) && isMatrix(msg)
 		modifies vAttr, msg, sent
 		ensures numIterations <= maxNumIterations ==> correctlyColored()
 	{
@@ -259,7 +263,7 @@ class PregelGraphColoring
 	}
 
 	lemma witness_for_existence()
-		requires valid2(sent) && numVertices > 0 && sent[0,0]
+		requires isMatrix(sent) && numVertices > 0 && sent[0,0]
 		ensures active()
 	{}
 }

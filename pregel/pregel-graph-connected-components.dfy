@@ -22,16 +22,26 @@ class PregelConnectedComponentMarkingAlgorithm
 	 * Beginning of user-supplied functions
 	 **************************************/
 
-	method SendMessage(src: VertexId, dst: VertexId, w: EdgeAttr) returns (msg: seq<(VertexId, Message)>)
-		requires isArray(vAttr) && isMatrix(sent) && isMatrix(graph)
-		requires isVertex(src) && isVertex(dst)
+	method SendMessage(src': VertexId, dst': VertexId, w: EdgeAttr,
+			srcIndices: array<VertexId>, dstIndices: array<VertexId>) returns (msg: seq<(VertexId, Message)>)
+		requires isArray(vAttr) && isMatrix(sent) && isMatrix(graph) 
+		requires isArray(srcIndices) && Permutation.isValid(srcIndices, numVertices)
+		requires isArray(dstIndices) && Permutation.isValid(dstIndices, numVertices)
+		requires isVertex(src') && isVertex(dst')
+		requires isVertex(srcIndices[src']) && isVertex(dstIndices[dst'])
 		requires vAttrInvariant()
-		requires adjacent(src, dst)
+		requires adjacent(srcIndices[src'], dstIndices[dst'])
+		requires forall i | 0 <= i < dst' :: noCollisionBetween(srcIndices[src'], dstIndices[i]);
+		requires forall i | 0 <= i < src' :: noCollisionAt(srcIndices[i])
 		modifies sent
-		ensures noCollisionBetween(src, dst)
-		ensures sent[src,dst] || sent[dst,src] <==> vAttr[src] != vAttr[dst];
+		ensures noCollisionBetween(srcIndices[src'], dstIndices[dst'])
+		ensures sent[srcIndices[src'],dstIndices[dst']] || sent[dstIndices[dst'],srcIndices[src']] <==> vAttr[srcIndices[src']] != vAttr[dstIndices[dst']];
 		ensures forall m | m in msg :: isVertex(m.0) && isMessage(m.1)
+		ensures forall i | 0 <= i < dst' :: noCollisionBetween(srcIndices[src'], dstIndices[i]);
+		ensures forall i | 0 <= i < src' :: noCollisionAt(srcIndices[i])
 	{
+		var src := srcIndices[src'];
+		var dst := dstIndices[dst'];
 		if(vAttr[src] < vAttr[dst]) {
 			sent[src,dst] := true;
 			sent[dst,src] := false;
@@ -73,7 +83,7 @@ class PregelConnectedComponentMarkingAlgorithm
 	function method correctlyColored(): bool
 		requires 0 <= numVertices
 		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph
 	{
 		correctlyColored'(numVertices)
 	}
@@ -81,7 +91,7 @@ class PregelConnectedComponentMarkingAlgorithm
 	function method correctlyColored'(dist: VertexId): bool
 		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
 		requires 0 <= dist <= numVertices
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph
 	{
 		forall i,j | 0 <= i < numVertices && 0 <= j < numVertices ::
 			connected'(i, j, dist) ==> vAttr[i] == vAttr[j]
@@ -111,21 +121,21 @@ class PregelConnectedComponentMarkingAlgorithm
 
 	function method noCollisions(): bool
 		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph, sent
 	{
 		forall vid :: 0 <= vid < numVertices ==> noCollisionAt(vid)
 	}
 
 	function method noCollisionAt(src: VertexId): bool
 		requires isVertex(src) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		reads this`graph, this`sent, this`vAttr, this`numVertices, graph, sent, vAttr
 	{
 		forall dst :: 0 <= dst < numVertices ==> noCollisionBetween(src, dst)
 	}
 
 	function method noCollisionBetween(src: VertexId, dst: VertexId): bool
 		requires isVertex(src) && isVertex(dst) && isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
-		reads this`graph, this`sent, this`vAttr, this`numVertices, vAttr
+		reads this`graph, this`sent, this`vAttr, this`numVertices, graph, sent, vAttr
 	{
 		adjacent(src, dst) && !sent[src,dst] && !sent[dst,src] ==> vAttr[src] == vAttr[dst]
 	}
@@ -133,7 +143,7 @@ class PregelConnectedComponentMarkingAlgorithm
 	function method noCollisions'(srcBound: VertexId, dstBound: VertexId): bool
 		requires srcBound <= numVertices && dstBound <= numVertices
 		requires isArray(vAttr) && isMatrix(graph) && isMatrix(sent)
-		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices
+		reads vAttr, this`graph, this`vAttr, this`sent, this`numVertices, graph, sent
 	{
 		forall src,dst | 0 <= src < srcBound && 0 <= dst < dstBound ::
 			adjacent(src, dst) && !sent[src,dst] && !sent[dst,src] ==> vAttr[src] == vAttr[dst]
@@ -196,28 +206,28 @@ class PregelConnectedComponentMarkingAlgorithm
 	/* Cannot use this predicate due to Dafny's bug (https://dafny.codeplex.com/workitem/146). */
 	function method active(): bool
 		requires isMatrix(sent)
-		reads this`sent, this`numVertices
+		reads this`sent, this`numVertices, sent
 	{
 		exists i,j | 0 <= i < numVertices && 0 <= j < numVertices :: sent[i,j]
 	}
 
 	function method adjacent(src: VertexId, dst: VertexId): bool
 		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
-		reads this`graph, this`numVertices
+		reads this`graph, this`numVertices, graph
 	{
 		graph[src,dst] != 0.0
 	}
 
 	function method connected(src: VertexId, dst: VertexId): bool
 		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
-		reads this`graph, this`numVertices
+		reads this`graph, this`numVertices, graph
 	{
 		exists dist | 1 <= dist <= numVertices :: connected'(src, dst, dist)
 	}
 
 	function method connected'(src: VertexId, dst: VertexId, dist: int): bool
 		requires isMatrix(graph) && isVertex(src) && isVertex(dst)
-		reads this`graph, this`numVertices
+		reads this`graph, this`numVertices, graph
 		decreases dist
 	{
 		if dist < 0 then
@@ -317,6 +327,7 @@ class PregelConnectedComponentMarkingAlgorithm
 		assert forall i | 0 <= i < numVertices :: !active[i];
 
 		var src' := 0;
+		//assert numVertices >= 0;
 		var srcIndices := Permutation.Generate(numVertices);
 		// invoke SendMessage on each edge
 		while src' < numVertices
@@ -340,7 +351,9 @@ class PregelConnectedComponentMarkingAlgorithm
 				var dst := dstIndices[dst'];
 				if adjacent(src, dst)
 				{
-					var msg' := SendMessage(src, dst, graph[src,dst]);
+					var msg' := SendMessage(src', dst', graph[src,dst], srcIndices, dstIndices);
+					//assert forall i | 0 <= i < dst' :: noCollisionBetween(srcIndices[src'], dstIndices[i]);
+					//assert forall i | 0 <= i < src' :: noCollisionAt(srcIndices[i]);
 					AccumulateMessage(msg, msg', active);
 				}
 				//assert noCollisionBetween(src, dst);
